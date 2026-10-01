@@ -1,10 +1,11 @@
 /**
- * Smoke test: the WIP adapter mounts and streams a placeholder chunk set.
+ * Mount smoke: the plugin registers its provider route and exposes the
+ * adapter's model resolution without spawning a CLI.
  */
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import { Context } from '@deepseek-ai/cordis'
-import { apply as applyCodebuddy } from '../src/index.ts'
+import { Config, apply, inject, name } from '../src/index.ts'
 
 function makeCtx() {
   const ctx = new Context()
@@ -14,30 +15,25 @@ function makeCtx() {
       registered.push({ providers, adapter })
     },
   })
-  ctx.provide('systemPrompt', { section() {} })
   return { ctx, registered }
 }
 
 describe('dsh-codebuddy smoke', () => {
-  it('registers the adapter for the codebuddy route', () => {
-    const { ctx, registered } = makeCtx()
-    applyCodebuddy(ctx, {})
-    assert.equal(registered.length, 1)
-    assert.deepEqual(registered[0].providers, ['codebuddy'])
+  it('declares its service dependency and plugin name', () => {
+    assert.deepEqual(inject, ['llm'])
+    assert.equal(name, 'codebuddy')
   })
 
-  it('streams a WIP placeholder response', async () => {
+  it('accepts an empty configuration', () => {
+    const result = Config['~standard'].validate({})
+    assert.equal(result.issues === undefined || result.issues.length === 0, true)
+  })
+
+  it('registers the adapter for the codebuddy route', () => {
     const { ctx, registered } = makeCtx()
-    applyCodebuddy(ctx, {})
-    const adapter = registered[0].adapter
-    const chunks = []
-    for await (const c of adapter.stream({
-      provider: 'codebuddy',
-      model: 'codebuddy',
-      messages: [{ role: 'user', content: 'hello' }],
-    })) {
-      chunks.push(c.type)
-    }
-    assert.deepEqual(chunks, ['block-start', 'text-delta', 'block-end', 'usage', 'finish'])
+    apply(ctx, {})
+    assert.equal(registered.length, 1)
+    assert.deepEqual(registered[0].providers, ['codebuddy'])
+    assert.equal(registered[0].adapter.providerInfo('codebuddy').name, 'CodeBuddy')
   })
 })

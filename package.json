@@ -15,6 +15,8 @@
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
+    "test:ci": "node --import tsx --test tests/smoke.test.mjs tests/unit-*.mjs",
+    "test:integration": "CODEBUDDY_SDK_INTEGRATION=1 node --import tsx --test tests/integration-cli.test.mjs",
     "test": "node --import tsx --test tests/*.mjs",
     "typecheck": "tsc --noEmit"
   },
@@ -32,7 +34,9 @@
     "@deepseek-ai/dsh-credentials": "^0.0.1-rc.1",
     "@deepseek-ai/dsh-llm": "^0.0.1-rc.1",
     "@deepseek-ai/schemastery": "^3.18.0",
-    "@tencent-ai/agent-sdk": "^0.3.0"
+    "@tencent-ai/agent-sdk": "^0.3.267",
+    "change-case": "^5.4.4",
+    "zod": "^4.0.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

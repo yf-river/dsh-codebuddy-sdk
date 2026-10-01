@@ -1,7 +1,7 @@
 # Plugin bundle for dsh-codebuddy-sdk.
 # Registers the CodeBuddy provider adapter into ctx.llm.
-# WIP: text-only single-turn streaming; tool calls and full message
-# translation land in the next iteration.
+# Multi-turn history, tool calls, and streaming are implemented; the CLI is
+# invoked per Harness step and resumed from an imported session file.
 - insert:
     - id: codebuddy
       name: 'dsh-codebuddy-sdk'
