@@ -18,7 +18,10 @@
     "test:ci": "node --import tsx --test tests/smoke.test.mjs tests/unit-*.mjs",
     "test:integration": "CODEBUDDY_SDK_INTEGRATION=1 node --import tsx --test tests/integration-cli.test.mjs",
     "test": "node --import tsx --test tests/*.mjs",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",
+    "prepack": "npm run clean && npm run build",
+    "prepublishOnly": "npm run clean && npm run build"
   },
   "keywords": [
     "dsh",
