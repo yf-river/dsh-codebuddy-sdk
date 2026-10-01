@@ -49,7 +49,15 @@ export const FALLBACK_MODELS: CodeBuddyModel[] = [{
 
 export function modelsFromSdk(supported: readonly ModelInfo[]): CodeBuddyModel[] {
   return supported
-    .map((model) => ({ id: model.value, name: model.displayName || model.value }))
+    // The published `.d.ts` describes `value`/`displayName`, while the CLI in
+    // the wild returns `id`/`name`; accept both rather than dropping the
+    // catalog on one of them.
+    .map((model) => {
+      const raw = model as ModelInfo & { id?: string; name?: string }
+      const id = raw.id ?? raw.value ?? ''
+      const name = raw.name ?? raw.displayName ?? id
+      return { id, name }
+    })
     .filter((model) => model.id)
     .map((model) => ({
       id: model.id,

@@ -6,7 +6,7 @@ describe('modelsFromSdk', () => {
   it('maps ids and names and estimates capability from the id', () => {
     const models = modelsFromSdk([
       { value: 'claude-sonnet-4-6', displayName: 'Sonnet', description: '' },
-      { value: 'hy3-preview-agent-ioa', displayName: 'Hunyuan', description: '' },
+      { id: 'hy3-preview-agent-ioa', name: 'Hunyuan' },
     ])
     assert.equal(models[0].contextWindow, 200_000)
     assert.equal(models[0].input.includes('image'), true)

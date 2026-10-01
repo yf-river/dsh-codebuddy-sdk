@@ -52,3 +52,25 @@ export function endQuery(query: unknown, label: string, options: TeardownOptions
   }
   closeQueryTransport(query, label, options)
 }
+
+/**
+ * Idempotent teardown for one query. `close()` on the underlying transport is
+ * idempotent too, so repeated calls (a completed turn plus fiber disposal) are
+ * safe.
+ */
+export class QueryReaper {
+  private closed = false
+
+  constructor(
+    private readonly query: unknown,
+    private readonly label: string,
+    private readonly options: TeardownOptions = {},
+  ) {}
+
+  /** Stop the turn (if any) and release the child process. */
+  async close(): Promise<void> {
+    if (this.closed) return
+    this.closed = true
+    endQuery(this.query, this.label, this.options)
+  }
+}

@@ -4,16 +4,14 @@
  * CodeBuddy reports Anthropic-shaped `content_block_*` events plus a final
  * `assistant`/`result` message. The Harness vocabulary keeps tool arguments as
  * raw JSON strings and ends a step at the first tool call so its own loop can
- * execute the tool, so this translator stops at that boundary.
+ * execute the tool, so one call to {@link translateStep} consumes exactly one
+ * CodeBuddy turn and stops at that boundary.
  */
 
 import type { Branded } from '@deepseek-ai/dsh-brand'
 import type { FinishReason, StreamChunk, TokenUsage } from '@deepseek-ai/dsh-llm'
-import type {
-  AssistantMessage,
-  Message as CodeBuddyMessage,
-  ResultMessage,
-} from '@tencent-ai/agent-sdk'
+import type { AssistantMessage, Message as CodeBuddyMessage } from '@tencent-ai/agent-sdk'
+import type { CodeBuddyToolBridge } from './tool-bridge.js'
 
 type ToolCallId = Branded<'CallId'>
 type StopReason = AssistantMessage['message']['stop_reason']
@@ -23,12 +21,11 @@ function toolCallId(value: string): ToolCallId {
   return value as ToolCallId
 }
 
-export interface StreamTranslation {
-  chunks: StreamChunk[]
-  /** True when this step ended on a tool call and the loop must execute it. */
+export interface StepStatus {
+  /** True when this step ended on a tool call and the loop must run it. */
   awaitingTool: boolean
-  sessionId?: string
-  failure?: { message: string; code?: string }
+  /** True when the conversation reached a terminal result and can be released. */
+  ended: boolean
 }
 
 function mapUsage(usage: Usage | undefined): TokenUsage {
@@ -47,39 +44,36 @@ function mapStopReason(reason: StopReason | null | undefined): FinishReason {
     case 'max_tokens':
       return { kind: 'max-tokens' }
     case 'refusal':
-      return {
-        kind: 'error',
-        failure: { message: 'CodeBuddy refused the request', code: 'REFUSAL' },
-      }
+      return { kind: 'error', failure: { message: 'CodeBuddy refused the request', code: 'REFUSAL' } }
     default:
       return { kind: 'stop' }
   }
 }
 
-function isResult(message: CodeBuddyMessage): message is ResultMessage {
-  return message.type === 'result'
-}
-
-function isAssistant(message: CodeBuddyMessage): message is AssistantMessage {
-  return message.type === 'assistant'
-}
-
 /**
- * Consume one CodeBuddy turn.
+ * Consume one CodeBuddy turn and yield Harness chunks.
  *
- * The returned chunks always end with `finish`; a tool-use turn ends with
- * `{ kind: 'tool-calls' }` without a `usage` chunk when the CLI supplied none,
- * and the caller is responsible for invoking `endQuery()` afterwards.
+ * A turn that calls a tool ends the iteration after yielding its `finish`
+ * chunk: the next step's `translateStep()` call resumes the same query, at
+ * which point the still-pending MCP handlers receive their results.
+ *
+ * The iterator is advanced with an explicit `next()` rather than `for await`:
+ * a `for await` that returns early would call `iterator.return()`, which tears
+ * down the CLI the next step still needs.
  */
-export async function* toStreamChunks(
-  source: AsyncIterable<CodeBuddyMessage>,
+export async function* translateStep(
+  source: AsyncIterator<CodeBuddyMessage>,
+  bridge: CodeBuddyToolBridge,
   callerSignal?: AbortSignal,
-): AsyncGenerator<StreamChunk> {
+): AsyncGenerator<StreamChunk, StepStatus, void> {
   let sawToolCall = false
-  let emittedTerminal = false
   const toolIndex = new Map<number, { id: string; name: string }>()
+  const argumentBuffers = new Map<number, string>()
 
-  for await (const message of source) {
+  while (true) {
+    const next = await source.next()
+    if (next.done) break
+    const message = next.value
     if (message.type === 'stream_event') {
       const event = message.event
       switch (event.type) {
@@ -90,6 +84,7 @@ export async function* toStreamChunks(
             yield { type: 'block-start', index: event.index, blockType: 'reasoning' }
           } else if (event.content_block.type === 'tool_use') {
             toolIndex.set(event.index, { id: event.content_block.id, name: event.content_block.name })
+            argumentBuffers.set(event.index, '')
             yield { type: 'block-start', index: event.index, blockType: 'tool-call' }
           }
           break
@@ -102,6 +97,7 @@ export async function* toStreamChunks(
             yield { type: 'reasoning-delta', index: event.index, text: delta.thinking }
           } else if (delta.type === 'input_json_delta') {
             const known = toolIndex.get(event.index)
+            argumentBuffers.set(event.index, (argumentBuffers.get(event.index) ?? '') + delta.partial_json)
             yield {
               type: 'tool-call-delta',
               index: event.index,
@@ -113,9 +109,9 @@ export async function* toStreamChunks(
           break
         }
         case 'content_block_stop': {
-          // The assembled `assistant` message carries the authoritative
-          // arguments; emitting a block-end here would win the Harness's
-          // first-close-wins race and drop them.
+          // The assembled assistant message below is authoritative and is the
+          // only place a `block-end` is emitted, so the Harness's
+          // first-close-wins rule cannot drop the real arguments.
           if (toolIndex.has(event.index)) sawToolCall = true
           break
         }
@@ -125,14 +121,10 @@ export async function* toStreamChunks(
       continue
     }
 
-    if (isAssistant(message)) {
+    if (message.type === 'assistant') {
       if (message.error) {
-        yield {
-          type: 'finish',
-          reason: { kind: 'error', failure: { message: message.error, code: 'CODEBUDDY_ERROR' } },
-        }
-        emittedTerminal = true
-        return
+        yield { type: 'finish', reason: { kind: 'error', failure: { message: message.error, code: 'CODEBUDDY_ERROR' } } }
+        return { awaitingTool: false, ended: true }
       }
       for (const [index, block] of message.message.content.entries()) {
         if (block.type === 'text') {
@@ -141,6 +133,7 @@ export async function* toStreamChunks(
           yield { type: 'block-end', index, block: { type: 'reasoning', text: block.thinking } }
         } else if (block.type === 'tool_use') {
           sawToolCall = true
+          bridge.noteToolCall(block.id)
           yield {
             type: 'block-end',
             index,
@@ -148,41 +141,42 @@ export async function* toStreamChunks(
               type: 'tool-call',
               id: toolCallId(block.id),
               name: block.name,
-              arguments: JSON.stringify(block.input ?? {}),
+              arguments: argumentBuffers.get(index) || JSON.stringify(block.input ?? {}),
             },
           }
         }
       }
       if (!sawToolCall && message.message.stop_reason === 'tool_use') sawToolCall = true
+      // A tool-call turn ends here: control returns to the Harness loop, which
+      // executes the tools and calls again with their results.
+      if (sawToolCall) {
+        yield { type: 'finish', reason: { kind: 'tool-calls' } }
+        return { awaitingTool: true, ended: false }
+      }
       continue
     }
 
-    if (isResult(message)) {
+    if (message.type === 'result') {
       yield { type: 'usage', usage: mapUsage(message.usage) }
       if (message.is_error || message.subtype !== 'success') {
         const detail = message.subtype === 'success'
           ? 'CodeBuddy reported an error'
           : message.errors?.join('; ') ?? message.subtype
-        yield {
-          type: 'finish',
-          reason: { kind: 'error', failure: { message: detail, code: 'CODEBUDDY_ERROR' } },
-        }
+        yield { type: 'finish', reason: { kind: 'error', failure: { message: detail, code: 'CODEBUDDY_ERROR' } } }
       } else {
         yield { type: 'finish', reason: mapStopReason(sawToolCall ? 'tool_use' : 'end_turn') }
       }
-      emittedTerminal = true
-      return
+      return { awaitingTool: sawToolCall, ended: true }
     }
   }
 
-  if (!emittedTerminal) {
-    yield {
-      type: 'finish',
-      reason: callerSignal?.aborted
-        ? { kind: 'aborted', failure: { message: 'CodeBuddy query aborted', code: 'ABORTED' } }
-        : sawToolCall
-          ? { kind: 'tool-calls' }
-          : { kind: 'error', failure: { message: 'CodeBuddy query ended without a result', code: 'STREAM_CLOSED' } },
-    }
+  yield {
+    type: 'finish',
+    reason: callerSignal?.aborted
+      ? { kind: 'aborted', failure: { message: 'CodeBuddy query aborted', code: 'ABORTED' } }
+      : sawToolCall
+        ? { kind: 'tool-calls' }
+        : { kind: 'error', failure: { message: 'CodeBuddy query ended without a result', code: 'STREAM_CLOSED' } },
   }
+  return { awaitingTool: sawToolCall, ended: true }
 }
