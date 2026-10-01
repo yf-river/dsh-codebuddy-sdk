@@ -1,7 +1,7 @@
 {
   "name": "dsh-codebuddy-sdk",
   "version": "0.1.0",
-  "description": "DeepSeek Harness plugin: CodeBuddy (Tencent Agent SDK) as an LLM provider adapter (ctx.llm). WIP \u2014 port of pi-codebuddy-sdk.",
+  "description": "DeepSeek Harness plugin: CodeBuddy (Tencent Agent SDK) as an LLM provider adapter (ctx.llm). WIP — port of pi-codebuddy-sdk.",
   "type": "module",
   "main": "dist/index.js",
   "exports": {
@@ -46,6 +46,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/RealAlexandreAI/dsh-codebuddy-sdk"
+    "url": "git+https://github.com/RetiredPhysicist/dsh-plugins.git",
+    "directory": "packages/dsh-codebuddy-sdk"
   }
 }

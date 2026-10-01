@@ -6,7 +6,7 @@
 
 Registers **CodeBuddy** (Tencent Agent SDK) as an LLM provider adapter for DeepSeek Harness (`ctx.llm`).
 
-> Port of [pi-codebuddy-sdk](https://github.com/RealAlexandreAI/pi-codebuddy-sdk).
+> Port of [pi-codebuddy-sdk](https://github.com/RetiredPhysicist/pi-plugins/tree/main/packages/pi-codebuddy-sdk).
 
 [English](README.md) · [中文](README.zh.md)
 
@@ -19,7 +19,7 @@ Registers **CodeBuddy** (Tencent Agent SDK) as an LLM provider adapter for DeepS
 > - ❌ tool-call streaming (dsh `StreamChunk` tool blocks)
 > - ❌ on-device verification against the local `codebuddy` CLI
 >
-> Track progress at [RealAlexandreAI/dsh-codebuddy-sdk/issues](https://github.com/RealAlexandreAI/dsh-codebuddy-sdk/issues).
+> Track progress at [RealAlexandreAI/dsh-codebuddy-sdk/issues](https://github.com/RetiredPhysicist/dsh-plugins/issues).
 
 ## Quick start
 

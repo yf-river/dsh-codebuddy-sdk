@@ -6,7 +6,7 @@
 
 把 **CodeBuddy**(腾讯 Agent SDK)注册为 DeepSeek Harness 的 LLM provider 适配器(`ctx.llm`)。
 
-> 由 [pi-codebuddy-sdk](https://github.com/RealAlexandreAI/pi-codebuddy-sdk) 移植。
+> 由 [pi-codebuddy-sdk](https://github.com/RetiredPhysicist/pi-plugins/tree/main/packages/pi-codebuddy-sdk) 移植。
 
 [English](README.md) · [中文](README.zh.md)
 
@@ -18,7 +18,7 @@
 > - ❌ 工具调用流式输出(dsh `StreamChunk` 工具块)
 > - ❌ 本机 `codebuddy` CLI 联调
 >
-> 进度看 [RealAlexandreAI/dsh-codebuddy-sdk/issues](https://github.com/RealAlexandreAI/dsh-codebuddy-sdk/issues)。
+> 进度看 [RealAlexandreAI/dsh-codebuddy-sdk/issues](https://github.com/RetiredPhysicist/dsh-plugins/issues)。
 
 ## 快速开始
 
