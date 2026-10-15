@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "codebuddy-sdk",
+    "description": "CodeBuddy (Tencent Agent SDK) as an LLM provider registered into ctx.llm."
+  }
+}

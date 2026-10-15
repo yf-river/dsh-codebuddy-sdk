@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "CodeBuddy 提供方",
+    "description": "把 CodeBuddy（腾讯 Agent SDK）作为 LLM 提供方注册到 ctx.llm。"
+  }
+}
