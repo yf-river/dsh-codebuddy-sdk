@@ -8,18 +8,13 @@
  * CodeBuddy turn and stops at that boundary.
  */
 
-import type { Branded } from '@deepseek-ai/dsh-brand'
+import { ToolCallId } from '@deepseek-ai/dsh-llm'
 import type { FinishReason, StreamChunk, TokenUsage } from '@deepseek-ai/dsh-llm'
 import type { AssistantMessage, Message as CodeBuddyMessage } from '@tencent-ai/agent-sdk'
 import type { CodeBuddyToolBridge } from './tool-bridge.js'
 
-type ToolCallId = Branded<'CallId'>
 type StopReason = AssistantMessage['message']['stop_reason']
 type Usage = AssistantMessage['message']['usage']
-
-function toolCallId(value: string): ToolCallId {
-  return value as ToolCallId
-}
 
 export interface StepStatus {
   /** True when this step ended on a tool call and the loop must run it. */
@@ -101,7 +96,7 @@ export async function* translateStep(
             yield {
               type: 'tool-call-delta',
               index: event.index,
-              id: toolCallId(known?.id ?? ''),
+              id: ToolCallId(known?.id ?? ''),
               ...known?.name === undefined ? {} : { name: known.name },
               argumentsDelta: delta.partial_json,
             }
@@ -139,7 +134,7 @@ export async function* translateStep(
             index,
             block: {
               type: 'tool-call',
-              id: toolCallId(block.id),
+              id: ToolCallId(block.id),
               name: block.name,
               arguments: argumentBuffers.get(index) || JSON.stringify(block.input ?? {}),
             },
