@@ -18,7 +18,6 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "test:ci": "node --import tsx --test tests/smoke.test.mjs tests/unit-*.mjs",
-    "test:integration": "CODEBUDDY_SDK_INTEGRATION=1 node --import tsx --test tests/integration-cli.test.mjs",
     "test": "node --import tsx --test tests/*.mjs",
     "typecheck": "tsc --noEmit",
     "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",
@@ -44,9 +43,9 @@
     "zod": "^4.0.0"
   },
   "devDependencies": {
-    "@types/node": "^22.0.0",
-    "tsx": "^4.19.0",
-    "typescript": "^5.5.0"
+    "@types/node": "^26.6.5",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2"
   },
   "dsh": {
     "bundle": {
@@ -57,5 +56,8 @@
     "type": "git",
     "url": "git+https://github.com/RetiredPhysicist/dsh-plugins.git",
     "directory": "packages/dsh-codebuddy-sdk"
+  },
+  "engines": {
+    "node": ">=26"
   }
 }
