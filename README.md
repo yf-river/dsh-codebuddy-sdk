@@ -62,7 +62,6 @@ Pick the model with the Harness model selector; `codebuddy/<id>` routes through 
 npm install
 npm run typecheck
 npm run test:ci            # unit tests, no CLI or credentials needed
-npm run test:integration   # opt-in, needs a signed-in codebuddy CLI
 npm run build
 ```
 

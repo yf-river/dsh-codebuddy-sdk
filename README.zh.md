@@ -62,7 +62,6 @@ dsh plugin add dsh-codebuddy-sdk
 npm install
 npm run typecheck
 npm run test:ci            # 单元测试,不需要 CLI 或凭据
-npm run test:integration   # 可选,需要已登录的 codebuddy CLI
 npm run build
 ```
 
