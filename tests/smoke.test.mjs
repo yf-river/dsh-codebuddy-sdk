@@ -36,4 +36,17 @@ describe('dsh-codebuddy smoke', () => {
     assert.deepEqual(registered[0].providers, ['codebuddy'])
     assert.equal(registered[0].adapter.providerInfo('codebuddy').name, 'CodeBuddy')
   })
+  it('plugin disposal awaits the adapter cleanup promise', async () => {
+    const { ctx, registered } = makeCtx()
+    apply(ctx, {})
+    let release, finished = false
+    registered[0].adapter.dispose = () => new Promise(resolve => { release = resolve })
+    const disposal = ctx.fiber.dispose().then(() => { finished = true })
+    await new Promise(resolve => setImmediate(resolve))
+    assert.equal(finished, false)
+    release()
+    await disposal
+    assert.equal(finished, true)
+  })
+
 })

@@ -1,0 +1,69 @@
+{
+  "date": "2026-10-26",
+  "codebuddyAttempts": 3,
+  "nativeAttempts": 1,
+  "maxOutputTokens": 256,
+  "entry": "Actual DSH SDK app with real CodeBuddy SDK; two continuous turns",
+  "turns": [
+    {
+      "turn": 1,
+      "answer": "30",
+      "requestedModel": "deepseek-v4.1-flash",
+      "reportedModel": "deepseek-v4.1-flash-ioa",
+      "rawSdkUsage": [
+        {
+          "input_tokens": 6020,
+          "output_tokens": 39,
+          "cache_read_input_tokens": 5760,
+          "cache_creation_input_tokens": 0
+        }
+      ],
+      "dshUsage": [
+        {
+          "inputTokens": 260,
+          "outputTokens": 39,
+          "cacheReadTokens": 5760,
+          "cacheWriteTokens": 0,
+          "totalTokens": 6059
+        }
+      ],
+      "finish": "completed"
+    },
+    {
+      "turn": 2,
+      "answer": "5",
+      "requestedModel": "deepseek-v4.1-flash",
+      "reportedModel": "deepseek-v4.1-flash-ioa",
+      "rawSdkUsage": [
+        {
+          "input_tokens": 6096,
+          "output_tokens": 23,
+          "cache_read_input_tokens": 5888,
+          "cache_creation_input_tokens": 0
+        }
+      ],
+      "dshUsage": [
+        {
+          "inputTokens": 208,
+          "outputTokens": 23,
+          "cacheReadTokens": 5888,
+          "cacheWriteTokens": 0,
+          "totalTokens": 6119
+        }
+      ],
+      "finish": "completed"
+    }
+  ],
+  "nativeComparison": {
+    "status": "FAILED",
+    "failure": {
+      "code": "MALFORMED_RESPONSE",
+      "message": "DeepSeek Messages stream: event precedes message_start"
+    }
+  },
+  "notes": [
+    "First CodeBuddy attempt failed on the enterprise model label guard before usage was returned.",
+    "The successful captures preceded the cache partition correction; dshUsage is recalculated from raw SDK counters without another model call.",
+    "Short functional checks are not a coding quality equivalence benchmark."
+  ]
+}

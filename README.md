@@ -1,70 +1,71 @@
-<p align="center">
-  <img src="assets/readme/hero.svg" alt="dsh-codebuddy-sdk — CodeBuddy as a DeepSeek Harness LLM provider" width="100%">
-</p>
+<p align="center"><img src="assets/readme/hero.svg" alt="dsh-codebuddy-sdk" width="100%"></p>
 
 # dsh-codebuddy-sdk
 
-Registers **CodeBuddy** (Tencent Agent SDK) as an LLM provider adapter for DeepSeek Harness (`ctx.llm`), so the Harness can run a CodeBuddy model while keeping its own tools, session, and UI.
+Use your CodeBuddy DeepSeek allowance from DSH through the official CodeBuddy Server. DSH owns prompts, history, compaction and tool execution. The provider returns streamed model output and per-generation token usage.
 
-> Port of [pi-codebuddy-sdk](https://github.com/RetiredPhysicist/pi-plugins/tree/main/packages/pi-codebuddy-sdk).
+English · [中文](README.zh.md)
 
-[English](README.md) · [中文](README.zh.md)
+Based on [RetiredPhysicist/dsh-plugins](https://github.com/RetiredPhysicist/dsh-plugins/tree/main/packages/dsh-codebuddy-sdk), originally ported from [pi-codebuddy-sdk](https://github.com/RetiredPhysicist/pi-plugins/tree/main/packages/pi-codebuddy-sdk). This checkout contains an unpublished local migration.
 
-## What it does
+## Setup
 
-- Advertises the CLI's own model catalog on the `codebuddy` provider route
-- Streams text, reasoning, and tool calls into the Harness `StreamChunk` protocol
-- Bridges Harness tools to CodeBuddy through an in-process SDK MCP server, so the Harness still executes every tool
-- Re-imports the Harness history into a CodeBuddy session file and resumes it per step, which is what makes multi-turn context survive the per-step CLI lifetime
-- Reaps the CLI child process on every completion path, including model discovery and aborts
-
-## Quick start
+Requires Node >=24, DSH 0.2.1-rc.3 and an existing official CodeBuddy CLI login. Agent SDK 0.3.287 and CodeBuddy Code 2.172.1 are pinned. The auto-updating user launcher is not used.
 
 ```sh
-dsh plugin add dsh-codebuddy-sdk
+npm ci --ignore-scripts
+npm run build
+dsh plugin --profile web add /data/ida/ai/dsh-codebuddy-sdk
 ```
 
-Requires the `codebuddy` CLI on `PATH`, signed in (`codebuddy` works standalone).
+The final command changes that profile. Development acceptance uses temporary profiles; your everyday profile is not installed or changed.
+
+Select `codebuddy/deepseek-v4.1-flash` in DSH. Enabling or disabling this plugin does not change your default model automatically. Select your configured official DeepSeek route when switching back.
 
 ```yaml
 - id: codebuddy
   name: dsh-codebuddy-sdk
   config:
-    provider: codebuddy            # provider route (default codebuddy)
-    model: hy3-preview-agent-ioa   # default model id (default: CLI's own default)
-    # pathToCodebuddyCode: /opt/homebrew/bin/codebuddy
-    # permissionMode: bypassPermissions
+    model: deepseek-v4.1-flash
+    maxTokens: 8192
 ```
 
-Pick the model with the Harness model selector; `codebuddy/<id>` routes through this adapter.
+`provider` overrides the route, `cwd` sets the runtime directory, and `contextWindow` overrides DSH budgeting metadata. Per-request `maxTokens` takes precedence. Remove the legacy `pathToCodebuddyCode` option; Server uses its pinned dependency.
 
-## Configuration
+## Behavior
 
-| key | default | meaning |
-|---|---|---|
-| `provider` | `codebuddy` | provider route registered with `ctx.llm` |
-| `model` | CLI default | model id sent when the request names none |
-| `pathToCodebuddyCode` | `PATH` lookup | explicit CLI path |
-| `cwd` | process cwd | working directory for the CLI |
-| `permissionMode` | `bypassPermissions` | CLI permission mode; the Harness owns tool approval |
-| `contextWindow` | estimated | context window override for every model |
-| `maxTokens` | estimated | output cap override for every model |
+Each generation receives DSH's complete current native role history. Compaction, pruning, edits and process restart do not require importing a persistent SDK session. Tool calls and results retain their IDs, including parallel identical calls. Invalid or incomplete tool relationships fail before provider I/O.
 
-## Privacy
+DSH executes every business tool. The SDK receives declarations through public MCP APIs, is denied tool execution, and is limited to one outbound model request by the official HTTP host policy. Each request runs in a separate child process. Official SDK authentication supplies the current login directly in worker memory; the plugin does not decode or persist credentials.
 
-- Talks to the local `codebuddy` CLI only; no extra network hop.
-- No credentials are read or stored; the CLI's own auth is reused.
-- Tool arguments and results pass between the Harness and the CLI over the local control protocol.
+DSH system prompts override defaults. Controllable CodeBuddy project rules, memory and background work are disabled. DSH owns compaction; the host policy blocks additional SDK recovery model requests. Summary requests are independent calls using DSH's history and instructions.
 
-## Development
+Token usage separates uncached input, cache reads, cache writes and output. Unknown usage remains unknown. Token counts are not currency charges.
 
-```bash
-npm install
+## Failure handling
+
+Empty replies fail explicitly. Refusal text is visible and marked as an error. Complete tool batches are validated before DSH receives executable calls; truncated or malformed calls are rejected. Context overflow, authentication, quota and rate-limit facts survive worker IPC when exposed by the official runtime.
+
+Each generation allows one outbound model request. Some network errors are hidden behind SDK recovery before a public error appears; these return `CODEBUDDY_RETRY_BLOCKED` and can be retried manually. Missing retry delays, request identifiers and usage stay unknown. Response metadata includes requested/reported models, finish reason and elapsed time.
+
+A completed model response has a 5-second SDK cleanup deadline and a further 1-second process-group confirmation window. Verified output remains usable after confirmed forced cleanup. Unconfirmed cleanup fails with `CODEBUDDY_CLEANUP_TIMEOUT`; missing completion acknowledgment fails with `CODEBUDDY_FINALIZATION_TIMEOUT`. Cancellation remains cancellation. Cleanup diagnostics are included in response metadata.
+
+## Boundaries and verification
+
+Text messages and text tool results are supported. Unsupported content and explicit unverified `temperature`/`stop` settings are rejected. CodeBuddy retains its user-query wrapper, merges adjacent user messages, prefixes MCP tools, and supplies some parameter defaults. It can change top-level schema `additionalProperties`. Fresh runtime startup adds latency. Model quality and deployment identity are not guaranteed to match the official DeepSeek API.
+
+```sh
 npm run typecheck
-npm run test:ci            # unit tests, no CLI or credentials needed
-npm run build
+npm run test:ci
+npm run test:integration
 ```
 
-## License
+Integration uses actual DSH and official runtimes with a local mock endpoint in a loopback-only network namespace. Linux, `unshare`, `iproute2` and namespace privileges are required. No account allowance is spent.
+
+Live acceptance is opt-in: `node scripts/test-daily-live.mjs --run`, after the complete offline suite passes. The separately authorized budget is at most 8 new calls including failures and summaries; ordinary output is capped at 512 tokens, summaries at 2048, and DSH request content at 64 KiB. Existing ledgers are preserved; the script refuses automatic reruns.
+
+Optional browser acceptance uses `node scripts/test-web.mjs` and `node scripts/test-web-browser.mjs`: actual DSH Web and Chromium, dummy credentials and a local model fixture. Configure local Playwright and Chrome paths with `DSH_PLAYWRIGHT_MODULE` and `DSH_CHROME_PATH`. See [daily reliability](docs/daily-reliability.md) for acceptance and rollback instructions.
+
+Six-hour reliability passed with 981 local generations, five scheduled restarts, and three browser checkpoints. Live compaction and recovery passed. Coding completion and equivalence with the official API remain unverified; all eight paired outputs hit the approved output cap. See [long reliability verification](docs/long-reliability.md).
 
 MIT

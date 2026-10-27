@@ -1,177 +1,141 @@
-/**
- * CodeBuddy message-stream translation into the Harness streaming protocol.
- *
- * CodeBuddy reports Anthropic-shaped `content_block_*` events plus a final
- * `assistant`/`result` message. The Harness vocabulary keeps tool arguments as
- * raw JSON strings and ends a step at the first tool call so its own loop can
- * execute the tool, so one call to {@link translateStep} consumes exactly one
- * CodeBuddy turn and stops at that boundary.
- */
-
-import { ToolCallId } from '@deepseek-ai/dsh-llm'
-import type { FinishReason, StreamChunk, TokenUsage } from '@deepseek-ai/dsh-llm'
-import type { AssistantMessage, Message as CodeBuddyMessage } from '@tencent-ai/agent-sdk'
+import { LlmError, ToolCallId } from '@deepseek-ai/dsh-llm'
+import type { ContentBlock, StreamChunk, TokenUsage } from '@deepseek-ai/dsh-llm'
 import type { CodeBuddyToolBridge } from './tool-bridge.js'
+import { sameModel } from './models.js'
 
-type StopReason = AssistantMessage['message']['stop_reason']
-type Usage = AssistantMessage['message']['usage']
+interface Delta { refusal?: string; content?: string; reasoning_content?: string; tool_calls?: { index: number; id?: string; function?: { name?: string; arguments?: string } }[] }
+interface Output { type: string; text?: string; refusal?: string; callId?: string; name?: string; arguments?: string; content?: { type: string; text?: string; refusal?: string }[]; summary?: { text?: string }[] }
+export interface ModelEvent {
+  type: string
+  event?: { model?: string; choices?: { delta?: Delta; finish_reason?: string | null }[]; usage?: Record<string, unknown> }
+  providerData?: { model?: string }
+  delta?: string
+  response?: { output?: Output[]; usage?: Record<string, unknown> }
+}
+interface Block { type: 'text' | 'reasoning' | 'tool-call'; text: string; id?: string; name?: string; index: number }
 
-export interface StepStatus {
-  /** True when this step ended on a tool call and the loop must run it. */
-  awaitingTool: boolean
-  /** True when the conversation reached a terminal result and can be released. */
-  ended: boolean
+function usageOf(raw: Record<string, unknown> | undefined): TokenUsage | undefined {
+  if (!raw) return undefined
+  const input = raw.prompt_tokens ?? raw.inputTokens
+  const output = raw.completion_tokens ?? raw.outputTokens
+  if (typeof input !== 'number' || typeof output !== 'number') return undefined
+  const details = (raw.prompt_tokens_details ?? raw.inputTokensDetails) as Record<string, unknown> | undefined
+  const read = raw.cache_read_input_tokens ?? details?.cached_tokens
+  const write = raw.cache_creation_input_tokens ?? details?.cache_write_tokens
+  const counters: TokenUsage = { inputTokens: input - (typeof read === 'number' ? read : 0) - (typeof write === 'number' ? write : 0), outputTokens: output }
+  if (typeof read === 'number') counters.cacheReadTokens = read
+  if (typeof write === 'number') counters.cacheWriteTokens = write
+  if (Object.values(counters).some(value => !Number.isFinite(value) || value < 0)) return undefined
+  counters.totalTokens = input + output
+  return counters
 }
 
-function mapUsage(usage: Usage | undefined): TokenUsage {
-  return {
-    inputTokens: usage?.input_tokens ?? 0,
-    outputTokens: usage?.output_tokens ?? 0,
-    ...(usage?.cache_read_input_tokens ?? 0) > 0 ? { cacheReadTokens: usage.cache_read_input_tokens } : {},
-    ...(usage?.cache_creation_input_tokens ?? 0) > 0 ? { cacheWriteTokens: usage.cache_creation_input_tokens } : {},
+// 原始 provider 事件负责流式增量；response_done 的原生输出负责完整性校验。
+export async function* translateStep(source: AsyncIterator<ModelEvent>, bridge: CodeBuddyToolBridge, expectedModel: string): AsyncGenerator<StreamChunk, { model: string }, void> {
+  const blocks = new Map<string, Block>()
+  let model: string | undefined, stop: string | null | undefined, rawUsage: Record<string, unknown> | undefined
+  let sawProviderDeltas = false, refusal = ''
+  function get(key: string, type: Block['type']): [Block, StreamChunk[]] {
+    const found = blocks.get(key)
+    if (found) return [found, []]
+    const block: Block = { type, text: '', index: blocks.size }; blocks.set(key, block)
+    return [block, [{ type: 'block-start', index: block.index, blockType: type }]]
   }
-}
-
-function mapStopReason(reason: StopReason | null | undefined): FinishReason {
-  switch (reason) {
-    case 'tool_use':
-      return { kind: 'tool-calls' }
-    case 'max_tokens':
-      return { kind: 'max-tokens' }
-    case 'refusal':
-      return { kind: 'error', failure: { message: 'CodeBuddy refused the request', code: 'REFUSAL' } }
-    default:
-      return { kind: 'stop' }
+  function checkModel(value?: string): void {
+    if (!value) return
+    if (!sameModel(expectedModel, value)) throw new Error(`SDK 返回模型 ${value}，请求模型为 ${expectedModel}`)
+    model = value
   }
-}
-
-/**
- * Consume one CodeBuddy turn and yield Harness chunks.
- *
- * A turn that calls a tool ends the iteration after yielding its `finish`
- * chunk: the next step's `translateStep()` call resumes the same query, at
- * which point the still-pending MCP handlers receive their results.
- *
- * The iterator is advanced with an explicit `next()` rather than `for await`:
- * a `for await` that returns early would call `iterator.return()`, which tears
- * down the CLI the next step still needs.
- */
-export async function* translateStep(
-  source: AsyncIterator<CodeBuddyMessage>,
-  bridge: CodeBuddyToolBridge,
-  callerSignal?: AbortSignal,
-): AsyncGenerator<StreamChunk, StepStatus, void> {
-  let sawToolCall = false
-  const toolIndex = new Map<number, { id: string; name: string }>()
-  const argumentBuffers = new Map<number, string>()
-
   while (true) {
     const next = await source.next()
-    if (next.done) break
-    const message = next.value
-    if (message.type === 'stream_event') {
-      const event = message.event
-      switch (event.type) {
-        case 'content_block_start': {
-          if (event.content_block.type === 'text') {
-            yield { type: 'block-start', index: event.index, blockType: 'text' }
-          } else if (event.content_block.type === 'thinking') {
-            yield { type: 'block-start', index: event.index, blockType: 'reasoning' }
-          } else if (event.content_block.type === 'tool_use') {
-            toolIndex.set(event.index, { id: event.content_block.id, name: event.content_block.name })
-            argumentBuffers.set(event.index, '')
-            yield { type: 'block-start', index: event.index, blockType: 'tool-call' }
-          }
-          break
-        }
-        case 'content_block_delta': {
-          const delta = event.delta
-          if (delta.type === 'text_delta') {
-            yield { type: 'text-delta', index: event.index, text: delta.text }
-          } else if (delta.type === 'thinking_delta') {
-            yield { type: 'reasoning-delta', index: event.index, text: delta.thinking }
-          } else if (delta.type === 'input_json_delta') {
-            const known = toolIndex.get(event.index)
-            argumentBuffers.set(event.index, (argumentBuffers.get(event.index) ?? '') + delta.partial_json)
-            yield {
-              type: 'tool-call-delta',
-              index: event.index,
-              id: ToolCallId(known?.id ?? ''),
-              ...known?.name === undefined ? {} : { name: known.name },
-              argumentsDelta: delta.partial_json,
-            }
-          }
-          break
-        }
-        case 'content_block_stop': {
-          // The assembled assistant message below is authoritative and is the
-          // only place a `block-end` is emitted, so the Harness's
-          // first-close-wins rule cannot drop the real arguments.
-          if (toolIndex.has(event.index)) sawToolCall = true
-          break
-        }
-        default:
-          break
+    if (next.done) throw new Error('模型流在完整输出之前关闭')
+    const event = next.value
+    checkModel(event.event?.model ?? event.providerData?.model)
+    if (event.type === 'model' && event.event?.choices) {
+      sawProviderDeltas = true
+      if (event.event.usage) rawUsage = event.event.usage
+      const choice = event.event.choices[0]
+      stop = choice?.finish_reason ?? stop
+      const delta = choice?.delta
+      if (delta?.refusal) refusal += delta.refusal
+      for (const [key, type, value] of [['reasoning', 'reasoning', delta?.reasoning_content], ['text', 'text', delta?.content]] as const) {
+        if (!value) continue
+        const [block, start] = get(key, type); yield* start; block.text += value
+        yield type === 'text' ? { type: 'text-delta', index: block.index, text: value } : { type: 'reasoning-delta', index: block.index, text: value }
       }
-      continue
-    }
-
-    if (message.type === 'assistant') {
-      if (message.error) {
-        yield { type: 'finish', reason: { kind: 'error', failure: { message: message.error, code: 'CODEBUDDY_ERROR' } } }
-        return { awaitingTool: false, ended: true }
-      }
-      for (const [index, block] of message.message.content.entries()) {
-        if (block.type === 'text') {
-          yield { type: 'block-end', index, block: { type: 'text', text: block.text } }
-        } else if (block.type === 'thinking') {
-          yield { type: 'block-end', index, block: { type: 'reasoning', text: block.thinking } }
-        } else if (block.type === 'tool_use') {
-          sawToolCall = true
-          bridge.noteToolCall(block.id)
-          yield {
-            type: 'block-end',
-            index,
-            block: {
-              type: 'tool-call',
-              id: ToolCallId(block.id),
-              name: block.name,
-              arguments: argumentBuffers.get(index) || JSON.stringify(block.input ?? {}),
-            },
-          }
+      for (const call of delta?.tool_calls ?? []) {
+        const [block, start] = get(`tool:${call.index}`, 'tool-call'); yield* start
+        if (call.id) block.id = call.id
+        if (call.function?.name) block.name = call.function.name
+        if (call.function?.arguments) {
+          block.text += call.function.arguments
+          if (block.id && block.name) yield { type: 'tool-call-delta', index: block.index, id: ToolCallId(block.id), name: bridge.harnessName(block.name), argumentsDelta: call.function.arguments }
         }
       }
-      if (!sawToolCall && message.message.stop_reason === 'tool_use') sawToolCall = true
-      // A tool-call turn ends here: control returns to the Harness loop, which
-      // executes the tools and calls again with their results.
-      if (sawToolCall) {
-        yield { type: 'finish', reason: { kind: 'tool-calls' } }
-        return { awaitingTool: true, ended: false }
+    } else if (!sawProviderDeltas && event.type === 'output_text_delta' && event.delta) {
+      const [block, start] = get('text', 'text'); yield* start; block.text += event.delta
+      yield { type: 'text-delta', index: block.index, text: event.delta }
+    } else if (event.type === 'response_done') {
+      const output = event.response?.output
+      if (!output || !model) throw new Error('完整模型输出缺少原生内容或模型标识')
+      let toolIndex = 0
+      for (const item of output) {
+        const finalRefusal = item.type === 'refusal' ? item.refusal ?? item.text : item.content?.filter(part => part.type === 'refusal').map(part => part.refusal ?? part.text ?? '').join('')
+        if (finalRefusal) refusal = finalRefusal
       }
-      continue
-    }
-
-    if (message.type === 'result') {
-      yield { type: 'usage', usage: mapUsage(message.usage) }
-      if (message.is_error || message.subtype !== 'success') {
-        const detail = message.subtype === 'success'
-          ? 'CodeBuddy reported an error'
-          : message.errors?.join('; ') ?? message.subtype
-        yield { type: 'finish', reason: { kind: 'error', failure: { message: detail, code: 'CODEBUDDY_ERROR' } } }
+      for (const item of output) {
+        if (item.type === 'function_call') {
+          const [block, start] = get(`tool:${toolIndex++}`, 'tool-call'); yield* start
+          if (block.id && block.id !== item.callId) throw new Error('流式工具 ID 与完整输出不一致')
+          if (block.name && block.name !== item.name) throw new Error('流式工具名称与完整输出不一致')
+          if (block.text && block.text !== item.arguments) throw new Error('流式工具参数与完整输出不一致')
+          block.id = item.callId; block.name = item.name; block.text = item.arguments ?? block.text
+        } else if (item.type === 'message' || item.type === 'reasoning') {
+          const type = item.type === 'message' ? 'text' : 'reasoning'
+          const value = (item.type === 'message' ? item.content : item.content ?? item.summary)?.filter(part => part.type !== 'refusal').map(part => part.text ?? '').join('') ?? ''
+          if (!value) continue
+          const [block, start] = get(type, type); yield* start
+          if (block.text && block.text !== value) throw new Error('流式内容与完整输出不一致')
+          block.text = value
+        }
+      }
+      const truncated = stop === 'length' || stop === 'max_tokens'
+      if (stop && !['stop', 'tool_calls', 'function_call', 'length', 'max_tokens', 'content_filter'].includes(stop)) throw new LlmError(`未知模型结束原因：${stop}`, 'INVALID_RESPONSE')
+      const calls = [...blocks.values()].filter(block => block.type === 'tool-call')
+      if (calls.length && (truncated || refusal || stop === 'content_filter')) throw new LlmError('模型未完整完成工具调用，未交给 DSH 执行', 'INCOMPLETE_TOOL_CALL')
+      if (calls.length !== toolIndex) throw new Error('流式工具数量与完整输出不一致')
+      // 在交付任何可执行工具前完成整批校验，避免同一响应的后半部分失败。
+      const completed: { index: number; block: ContentBlock }[] = []
+      for (const block of blocks.values()) {
+        let content: ContentBlock
+        if (block.type === 'tool-call') {
+          if (!block.id || !block.name) throw new Error('工具调用缺少 ID 或名称')
+          let args: unknown
+          try { args = JSON.parse(block.text) } catch { throw new LlmError('工具参数不是完整 JSON，未交给 DSH 执行', 'INVALID_TOOL_CALL') }
+          if (!args || typeof args !== 'object' || Array.isArray(args)) throw new LlmError('工具参数必须是 JSON 对象', 'INVALID_TOOL_CALL')
+          bridge.noteToolCall(block.id, block.name, args)
+          content = { type: 'tool-call', id: ToolCallId(block.id), name: bridge.harnessName(block.name), arguments: block.text }
+        } else content = { type: block.type, text: block.text }
+        completed.push({ index: block.index, block: content })
+      }
+      for (const block of completed) yield { type: 'block-end', ...block }
+      if (refusal) {
+        const index = blocks.size
+        yield { type: 'block-start', index, blockType: 'text' }
+        yield { type: 'text-delta', index, text: refusal }
+        yield { type: 'block-end', index, block: { type: 'text', text: refusal } }
+      }
+      // 未收到 provider 计数时，SDK 的零值可能是占位计数，不能当作真实零消耗。
+      const fallback = event.response?.usage
+      const usage = usageOf(rawUsage ?? (fallback && (Number(fallback.inputTokens) > 0 || Number(fallback.outputTokens) > 0) ? fallback : undefined))
+      if (usage) yield { type: 'usage', usage }
+      if (refusal || stop === 'content_filter') {
+        yield { type: 'finish', reason: { kind: 'error', failure: { code: 'REFUSAL', message: refusal || '模型拒绝了本次请求（content_filter）' } } }
       } else {
-        yield { type: 'finish', reason: mapStopReason(sawToolCall ? 'tool_use' : 'end_turn') }
+        if (!truncated && !calls.length && !completed.some(item => item.block.type === 'text' && item.block.text.trim())) throw new LlmError('模型正常结束但未返回可用回复', 'EMPTY_RESPONSE')
+        yield { type: 'finish', reason: calls.length ? { kind: 'tool-calls' } : truncated ? { kind: 'max-tokens' } : { kind: 'stop' } }
       }
-      return { awaitingTool: sawToolCall, ended: true }
+      return { model }
     }
   }
-
-  yield {
-    type: 'finish',
-    reason: callerSignal?.aborted
-      ? { kind: 'aborted', failure: { message: 'CodeBuddy query aborted', code: 'ABORTED' } }
-      : sawToolCall
-        ? { kind: 'tool-calls' }
-        : { kind: 'error', failure: { message: 'CodeBuddy query ended without a result', code: 'STREAM_CLOSED' } },
-  }
-  return { awaitingTool: sawToolCall, ended: true }
 }

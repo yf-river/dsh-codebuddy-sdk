@@ -1,0 +1,134 @@
+{
+  "date": "2026-10-26",
+  "status": "PASS: supported daily flows; local unpublished delivery",
+  "delivery": {
+    "everydayProfileInstalled": false,
+    "committed": false,
+    "pushed": false,
+    "published": false,
+    "packageArtifact": "artifacts/daily-package/dsh-codebuddy-sdk-0.1.5.tgz"
+  },
+  "runtime": {
+    "node": "24.11.1",
+    "dsh": "0.2.1-rc.3",
+    "agentSDK": "0.3.287",
+    "codebuddyCode": "2.172.1"
+  },
+  "unit": {
+    "passed": 30,
+    "total": 30,
+    "evidence": "artifacts/daily-reliability/unit.tap"
+  },
+  "integration": {
+    "passed": 20,
+    "total": 20,
+    "realModelRequests": 0,
+    "network": "loopback-only namespace",
+    "runs": "one complete final invocation after history validator correction",
+    "evidence": "artifacts/sdk-integration/report.json"
+  },
+  "browser": {
+    "passed": 6,
+    "total": 6,
+    "entry": "actual DSH Web and Chromium",
+    "model": "local fixture with dummy credentials",
+    "realModelRequests": 0,
+    "evidence": "artifacts/daily-web/report.json"
+  },
+  "realAcceptance": {
+    "checks": [
+      {
+        "name": "official account tool execution",
+        "status": "PASS"
+      },
+      {
+        "name": "manual summary adopted and history reduced",
+        "status": "PASS"
+      },
+      {
+        "name": "continuation uses adopted summary and remembers archived facts",
+        "status": "PASS"
+      },
+      {
+        "name": "automatic compaction adopted and continued in same session",
+        "status": "PASS"
+      },
+      {
+        "name": "restart restores compacted facts and executes a new DSH tool",
+        "status": "PASS"
+      }
+    ],
+    "entry": "actual DSH SDK app with official CodeBuddy account",
+    "reasoningEffort": "off",
+    "attempts": 8,
+    "limit": 8,
+    "summaryCalls": 2,
+    "ordinaryCalls": 6,
+    "maxOrdinaryOutputTokens": 512,
+    "maxSummaryOutputTokens": 2048,
+    "maxDshInputBytes": 65536,
+    "largestDshInputBytes": 51354,
+    "reportedModels": [
+      "deepseek-v4.1-flash-ioa"
+    ],
+    "tokenUsage": {
+      "inputTokens": 69038,
+      "outputTokens": 1778,
+      "cacheReadTokens": 0,
+      "cacheWriteTokens": 0,
+      "totalTokens": 70816
+    },
+    "currencyCharge": "not audited",
+    "manualVisibleHistoryEstimatedTokens": {
+      "before": 7004,
+      "after": 1154
+    },
+    "summarySourceEstimatedTokens": [
+      6348,
+      2277
+    ],
+    "initialValidatorFailure": "Summary mentioned old marker text; original message ID was absent. Corrected to compare original message IDs. Original report preserved; continued same session and ledger after four calls.",
+    "evidence": "artifacts/daily-live/report.json",
+    "budget": "artifacts/daily-live/budget.json",
+    "canonicalSessionLog": "artifacts/daily-live/session-log.jsonl",
+    "usageEvidence": "artifacts/daily-live/usage-and-compaction.json"
+  },
+  "remaining": [
+    "No controlled coding-quality equivalence benchmark against the official DeepSeek API.",
+    "CodeBuddy wrappers, MCP naming/schema defaults and per-generation cold-start latency remain.",
+    "Some pre-response network failures expose no original cause before SDK recovery; CODEBUDDY_RETRY_BLOCKED is explicit and manually retryable.",
+    "Text only; explicit temperature/stop and arbitrary runtime-version upgrades are outside acceptance."
+  ],
+  "sourceHashes": {
+    "cordis.patch.yml": "0a80d09cbfc09d36f47aed3ac1c37c68a2ed50118f9e130df5ba0d95ec0446ea",
+    "package-lock.json": "89f0f0f4a4fd7ff9e101c8dc12dfc8f769135c127f12eacf35635dfd5c1f07e6",
+    "package.json": "881c6689a9e4c7b04cd5181a1674fc2548af29660d49a781f3db18be1a217756",
+    "scripts/acceptance-history.mjs": "056eeaef6dc4010380dd6b5a6e464455cf0425ceb133466c8ad4089c8cfcca62",
+    "scripts/compaction-control.mjs": "ec89397069c8bf7e2c49548a86a39b35611c567f7e6b4e214d41bef77fc181de",
+    "scripts/dsh-client.mjs": "f97cf32b34bbe1660ec71ef56836a0148434dc20ed145e5b27205a979d4424b6",
+    "scripts/dsh-fixture.mjs": "3e86f138830b7dc2f52740498653be86d6aa8fb0be9cfe4cb61d6fc9a0f6bed5",
+    "scripts/test-daily-live.mjs": "e16bc62a29601b2910213434882fae9004351f04dc4f9b00ed8f334f84535883",
+    "scripts/test-live.mjs": "58c42a2ac9663d29df4cf4a536f38ba3627b935b9bac0ced9db8d6640cea7b40",
+    "scripts/test-sdk.mjs": "44601d11c12f251f103d27317ff3aaf7b0e5047d0d2ad4641e0924ded8c16a89",
+    "scripts/test-server-live.mjs": "73cce96388a7086bb736bc8feb073991b57ef801b2e1b4ebea68b4fcb7fd6b3d",
+    "scripts/test-web-browser.mjs": "30e86438faa112fc8bbc80488c45ed284942882461793b7c3519602037473e07",
+    "scripts/test-web.mjs": "08a1785acf5109a82e87a7e355027c7cd22621d6adc7f17f56d25ae8e5aa4aad",
+    "src/errors.ts": "5fbaa7c05923bf38d6ae585976bd5a25b5807696fb17baecc6df5c4f180a9234",
+    "src/history.ts": "e9f953849043f0dd2b4598cf77b5764a3dfdfb47c902739772b32f513f2ad2a6",
+    "src/index.ts": "ab192b223341188dcd93bd19d2352f3506ff647829b57a481b88bb8e32c1f026",
+    "src/models.ts": "eb185bc1272a041f403e4db7f121ea54cd42e0529e73f1ad58309ef2404c9310",
+    "src/request-policy.ts": "2325c9545227c043875e6b30cf46b6765f25370490df8a40cfb2c3c8690c1bd5",
+    "src/runtime.ts": "af249407be49a32663238acf4a1b3885a8f611670cbb9bf7b8c7e8df238ee9d1",
+    "src/stream.ts": "16d7f65b906a75f5aea186030f8fd109ef1ae023dff971f6928254f6b44399bd",
+    "src/tool-bridge.ts": "38ed1cea193f9992eb057b0454d035edcbcfd47c68081e8749678ed0a236e43b",
+    "src/worker.ts": "085e94071585180257c47df705dbb7152d377abe43a2d7bfebb584790766f8e9",
+    "tests/smoke.test.mjs": "dc44fdc2a5fe8ad52873b797de56d67c3da8132e8bfa87f58961b10184bf8bac",
+    "tests/unit-daily-acceptance.test.mjs": "a7ec22285b3d619a34b827c10bdc2a42d6ab1bea1c0383f8114a36c86bcdc973",
+    "tests/unit-errors.test.mjs": "56d890b67229b7bb11f2fcfb4f4215580a4b64fcc4ccf970c53ffdc4af9447d7",
+    "tests/unit-history.test.mjs": "ca35a225ea616cb54e6b3f0bf63573e75b257586368f62e27fb1645d2ac95957",
+    "tests/unit-models.test.mjs": "91355e97ce12db392945a76d099a67aa214bd325f755c2e3fac6ea716264ac29",
+    "tests/unit-request-policy.test.mjs": "62473236de8ed47a794e7526cb5c4a9ed9492364dd516120e7b1da431e6ba1b6",
+    "tests/unit-stream.test.mjs": "e48e39f6e333a4e530c1ae32e564d1d8b0ea2ee71ec15bddd41d87302003bbc3",
+    "tests/unit-tool-bridge.test.mjs": "83e20b7d6fc98f7ee02e46e9d360e9f9516e21945e6d3c2ced3e29bd03f11319"
+  }
+}

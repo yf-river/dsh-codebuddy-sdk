@@ -1,0 +1,1046 @@
+{
+  "status": "PARTIAL",
+  "reason": "lifecycle and six-hour reliability pass; coding completion and quality equivalence not established within approved caps",
+  "versions": {
+    "node": "v24.11.1",
+    "sdk": "0.3.287",
+    "cli": "2.172.1",
+    "dsh": "0.2.1-rc.3"
+  },
+  "unitTests": {
+    "pass": 38,
+    "fail": 0
+  },
+  "integration": {
+    "node": "v24.11.1",
+    "sdk": "0.3.287",
+    "cli": "2.172.1",
+    "dsh": "0.2.1-rc.3",
+    "realModelRequests": 0,
+    "network": "loopback-only namespace",
+    "checks": [
+      {
+        "name": "SDK SSE preserves thinking, text and final usage frames",
+        "status": "PASS"
+      },
+      {
+        "name": "system override, exact model, output cap, clean project config",
+        "status": "PASS"
+      },
+      {
+        "name": "official resume retains both user and assistant history",
+        "status": "PASS"
+      },
+      {
+        "name": "edited/imported history uses exactly the current DSH snapshot",
+        "status": "PASS"
+      },
+      {
+        "name": "SDK cache accounting matches the provider total",
+        "status": "PASS"
+      },
+      {
+        "name": "MCP tool schema, name, real DSH result and per-generation usage",
+        "status": "PASS"
+      },
+      {
+        "name": "output truncation bounded to one SDK model request",
+        "status": "PASS"
+      },
+      {
+        "name": "public Server failures preserve provider classification across worker IPC",
+        "status": "PASS"
+      },
+      {
+        "name": "network failure is bounded and never silently succeeds or repeats I/O",
+        "status": "PASS"
+      },
+      {
+        "name": "public Server empty and refusal responses never become successful stops",
+        "status": "PASS"
+      },
+      {
+        "name": "real DSH headless profile loads the provider and completes a turn",
+        "status": "PASS"
+      },
+      {
+        "name": "real DSH SDK entry resumes a second turn with its actual history",
+        "status": "PASS"
+      },
+      {
+        "name": "real DSH manual compaction twice, pruned tools and restart use current history",
+        "status": "PASS"
+      },
+      {
+        "name": "real DSH automatic compaction continues within its original session",
+        "status": "PASS"
+      },
+      {
+        "name": "real DSH context overflow compacts and recovers; auth and quota preserve history",
+        "status": "PASS"
+      },
+      {
+        "name": "daily live fixture rehearses manual and automatic compaction and restart within eight calls",
+        "status": "PASS"
+      },
+      {
+        "name": "worker transport flushes a large complete response before exiting",
+        "status": "PASS"
+      },
+      {
+        "name": "worker transport cancellation drains an active model request",
+        "status": "PASS"
+      },
+      {
+        "name": "worker spawn failure settles cleanup instead of hanging on a missing workspace",
+        "status": "PASS"
+      },
+      {
+        "name": "cancellation closes SDK subprocess",
+        "status": "PASS"
+      }
+    ]
+  },
+  "soak": {
+    "status": "PASS",
+    "durationMs": 21600000,
+    "tickMs": 30000,
+    "minimumGenerations": 600,
+    "maximumGenerations": 1000,
+    "realModelRequests": 0,
+    "network": "loopback-only namespace",
+    "completedOperations": 666,
+    "expectedFaults": 121,
+    "manualSummaries": 55,
+    "automaticSummaries": 222,
+    "restarts": 5,
+    "webGenerations": 18,
+    "failures": [],
+    "scenarios": {
+      "error-context": 1,
+      "error-auth": 1,
+      "error-quota": 1,
+      "error-rate": 1,
+      "error-server": 1,
+      "network-error": 1,
+      "empty": 1,
+      "refusal": 1,
+      "max-tokens": 1,
+      "broken-stream": 1,
+      "bad-tool": 1,
+      "split": 1,
+      "delayed": 1,
+      "large": 1,
+      "web-start": 1,
+      "slot-0": 56,
+      "slot-1": 56,
+      "slot-2": 56,
+      "slot-3": 56,
+      "slot-4": 56,
+      "slot-5": 56,
+      "slot-6": 55,
+      "slot-7": 55,
+      "slot-8": 55,
+      "slot-9": 55,
+      "slot-10": 55,
+      "slot-11": 55,
+      "scheduled-restart": 5,
+      "web-middle": 1,
+      "web-end": 1
+    },
+    "startedAt": "2026-10-26T13:54:39.099Z",
+    "pausedForLive": false,
+    "lingeringOwnedProcesses": [],
+    "finishedAt": "2026-10-26T19:55:31.142Z",
+    "nativeModelGenerations": 963,
+    "modelGenerations": 981
+  },
+  "resources": {
+    "samples": 361,
+    "detachedProcessSamples": 0,
+    "continuousProcessHourly": [
+      {
+        "hour": 1,
+        "samples": 60,
+        "continuousDshMedianMiB": 201.3,
+        "continuousDshFdRange": [
+          23,
+          25
+        ],
+        "driverMedianMiB": 106.1
+      },
+      {
+        "hour": 2,
+        "samples": 60,
+        "continuousDshMedianMiB": 209.3,
+        "continuousDshFdRange": [
+          25,
+          25
+        ],
+        "driverMedianMiB": 113.2
+      },
+      {
+        "hour": 3,
+        "samples": 60,
+        "continuousDshMedianMiB": 207.4,
+        "continuousDshFdRange": [
+          25,
+          25
+        ],
+        "driverMedianMiB": 116.0
+      },
+      {
+        "hour": 4,
+        "samples": 60,
+        "continuousDshMedianMiB": 209.6,
+        "continuousDshFdRange": [
+          25,
+          25
+        ],
+        "driverMedianMiB": 118.0
+      },
+      {
+        "hour": 5,
+        "samples": 60,
+        "continuousDshMedianMiB": 213.1,
+        "continuousDshFdRange": [
+          25,
+          25
+        ],
+        "driverMedianMiB": 119.5
+      },
+      {
+        "hour": 6,
+        "samples": 60,
+        "continuousDshMedianMiB": 209.4,
+        "continuousDshFdRange": [
+          25,
+          25
+        ],
+        "driverMedianMiB": 124.4
+      }
+    ],
+    "interpretation": "Continuous DSH RSS plateaus around 200-213 MiB; FDs remain 25 after warmup. Driver retains notifications and rises to 124.4 MiB median in hour 6; this is not evidence of zero leaks."
+  },
+  "resourceObservation": {
+    "stage": "resource-observation",
+    "plannedIdleMs": 1200000,
+    "reason": "Observe quiescent resources while keeping offline generations below the authorized 1000 cap",
+    "requestedAt": "2026-10-26T17:26:52.029Z",
+    "startedAt": "2026-10-26T17:27:06.549Z",
+    "before": {
+      "status": "RUNNING",
+      "durationMs": 21600000,
+      "tickMs": 30000,
+      "minimumGenerations": 600,
+      "maximumGenerations": 1000,
+      "realModelRequests": 0,
+      "network": "loopback-only namespace",
+      "completedOperations": 418,
+      "expectedFaults": 79,
+      "manualSummaries": 35,
+      "automaticSummaries": 138,
+      "restarts": 3,
+      "webGenerations": 12,
+      "failures": [],
+      "scenarios": {
+        "error-context": 1,
+        "error-auth": 1,
+        "error-quota": 1,
+        "error-rate": 1,
+        "error-server": 1,
+        "network-error": 1,
+        "empty": 1,
+        "refusal": 1,
+        "max-tokens": 1,
+        "broken-stream": 1,
+        "bad-tool": 1,
+        "split": 1,
+        "delayed": 1,
+        "large": 1,
+        "web-start": 1,
+        "slot-0": 35,
+        "slot-1": 35,
+        "slot-2": 35,
+        "slot-3": 35,
+        "slot-4": 35,
+        "slot-5": 35,
+        "slot-6": 35,
+        "slot-7": 35,
+        "slot-8": 35,
+        "slot-9": 35,
+        "slot-10": 34,
+        "slot-11": 34,
+        "scheduled-restart": 3,
+        "web-middle": 1
+      },
+      "startedAt": "2026-10-26T13:54:39.099Z",
+      "pausedForLive": true,
+      "nativeModelGenerations": 608,
+      "modelGenerations": 620,
+      "elapsedMs": 12747074
+    },
+    "finishedAt": "2026-10-26T17:47:06.626Z",
+    "after": {
+      "status": "RUNNING",
+      "durationMs": 21600000,
+      "tickMs": 30000,
+      "minimumGenerations": 600,
+      "maximumGenerations": 1000,
+      "realModelRequests": 0,
+      "network": "loopback-only namespace",
+      "completedOperations": 418,
+      "expectedFaults": 79,
+      "manualSummaries": 35,
+      "automaticSummaries": 138,
+      "restarts": 3,
+      "webGenerations": 12,
+      "failures": [],
+      "scenarios": {
+        "error-context": 1,
+        "error-auth": 1,
+        "error-quota": 1,
+        "error-rate": 1,
+        "error-server": 1,
+        "network-error": 1,
+        "empty": 1,
+        "refusal": 1,
+        "max-tokens": 1,
+        "broken-stream": 1,
+        "bad-tool": 1,
+        "split": 1,
+        "delayed": 1,
+        "large": 1,
+        "web-start": 1,
+        "slot-0": 35,
+        "slot-1": 35,
+        "slot-2": 35,
+        "slot-3": 35,
+        "slot-4": 35,
+        "slot-5": 35,
+        "slot-6": 35,
+        "slot-7": 35,
+        "slot-8": 35,
+        "slot-9": 35,
+        "slot-10": 34,
+        "slot-11": 34,
+        "scheduled-restart": 3,
+        "web-middle": 1
+      },
+      "startedAt": "2026-10-26T13:54:39.099Z",
+      "pausedForLive": true,
+      "nativeModelGenerations": 608,
+      "modelGenerations": 620,
+      "elapsedMs": 13904011
+    },
+    "status": "PASS"
+  },
+  "live": {
+    "status": "PARTIAL",
+    "stages": {
+      "start": {
+        "status": "FAILED",
+        "startedAt": "2026-10-26T13:54:40.002Z",
+        "error": {
+          "type": "Error",
+          "message": "coding turn did not complete; behavior tests failed"
+        },
+        "finishedAt": "2026-10-26T13:56:30.268Z"
+      },
+      "middle": {
+        "status": "FAILED",
+        "startedAt": "2026-10-26T16:54:39.099Z",
+        "error": {
+          "type": "Error",
+          "message": "coding turn did not complete"
+        },
+        "finishedAt": "2026-10-26T16:56:35.771Z"
+      },
+      "comparison": {
+        "status": "PARTIAL",
+        "startedAt": "2026-10-26T18:54:39.102Z",
+        "finishedAt": "2026-10-26T18:59:04.272Z"
+      }
+    },
+    "channels": {
+      "codebuddy": {
+        "attempts": 12,
+        "limit": 16,
+        "totals": {
+          "inputTokens": 79228,
+          "cacheReadTokens": 0,
+          "cacheWriteTokens": 0,
+          "outputTokens": 25628,
+          "totalTokens": 104856
+        },
+        "entries": [
+          {
+            "phase": "coding-start",
+            "time": "2026-10-26T13:55:27.882Z",
+            "model": "deepseek-v4.1-flash",
+            "purpose": "conversation",
+            "inputBytes": 37903,
+            "maxTokens": 4096,
+            "durationMs": 8639,
+            "usage": {
+              "inputTokens": 8575,
+              "outputTokens": 367,
+              "cacheReadTokens": 0,
+              "cacheWriteTokens": 0,
+              "totalTokens": 8942
+            },
+            "finish": "tool-calls",
+            "reported": {
+              "kind": "codebuddy-server",
+              "version": 2,
+              "requestedModel": "deepseek-v4.1-flash",
+              "reportedModel": "deepseek-v4.1-flash-ioa",
+              "durationMs": 8631,
+              "finishReason": "tool-calls",
+              "cleanup": {
+                "kind": "normal",
+                "durationMs": 148
+              }
+            }
+          },
+          {
+            "phase": "coding-start",
+            "time": "2026-10-26T13:55:36.555Z",
+            "model": "deepseek-v4.1-flash",
+            "purpose": "conversation",
+            "inputBytes": 40451,
+            "maxTokens": 4096,
+            "durationMs": 34927,
+            "usage": {
+              "inputTokens": 8713,
+              "outputTokens": 4096,
+              "cacheReadTokens": 0,
+              "cacheWriteTokens": 0,
+              "totalTokens": 12809
+            },
+            "finish": "max-tokens",
+            "reported": {
+              "kind": "codebuddy-server",
+              "version": 2,
+              "requestedModel": "deepseek-v4.1-flash",
+              "reportedModel": "deepseek-v4.1-flash-ioa",
+              "durationMs": 34922,
+              "finishReason": "max-tokens",
+              "cleanup": {
+                "kind": "forced",
+                "durationMs": 5080,
+                "reason": "cleanup-timeout"
+              }
+            }
+          },
+          {
+            "phase": "summary",
+            "time": "2026-10-26T13:56:11.641Z",
+            "model": "deepseek-v4.1-flash",
+            "purpose": "compaction",
+            "inputBytes": 42346,
+            "maxTokens": 4096,
+            "durationMs": 11849,
+            "usage": {
+              "inputTokens": 9098,
+              "outputTokens": 1200,
+              "cacheReadTokens": 0,
+              "cacheWriteTokens": 0,
+              "totalTokens": 10298
+            },
+            "finish": "stop",
+            "reported": {
+              "kind": "codebuddy-server",
+              "version": 2,
+              "requestedModel": "deepseek-v4.1-flash",
+              "reportedModel": "deepseek-v4.1-flash-ioa",
+              "durationMs": 11843,
+              "finishReason": "stop",
+              "cleanup": {
+                "kind": "normal",
+                "durationMs": 133
+              }
+            }
+          },
+          {
+            "phase": "recovery",
+            "time": "2026-10-26T13:56:23.525Z",
+            "model": "deepseek-v4.1-flash",
+            "purpose": "conversation",
+            "inputBytes": 54088,
+            "maxTokens": 4096,
+            "durationMs": 6653,
+            "usage": {
+              "inputTokens": 8485,
+              "outputTokens": 26,
+              "cacheReadTokens": 0,
+              "cacheWriteTokens": 0,
+              "totalTokens": 8511
+            },
+            "finish": "stop",
+            "reported": {
+              "kind": "codebuddy-server",
+              "version": 2,
+              "requestedModel": "deepseek-v4.1-flash",
+              "reportedModel": "deepseek-v4.1-flash-ioa",
+              "durationMs": 6647,
+              "finishReason": "stop",
+              "cleanup": {
+                "kind": "normal",
+                "durationMs": 128
+              }
+            }
+          },
+          {
+            "phase": "coding-middle",
+            "time": "2026-10-26T16:55:49.895Z",
+            "model": "deepseek-v4.1-flash",
+            "purpose": "conversation",
+            "inputBytes": 62513,
+            "maxTokens": 4096,
+            "durationMs": 6525,
+            "usage": {
+              "inputTokens": 10102,
+              "outputTokens": 70,
+              "cacheReadTokens": 0,
+              "cacheWriteTokens": 0,
+              "totalTokens": 10172
+            },
+            "finish": "tool-calls",
+            "reported": {
+              "kind": "codebuddy-server",
+              "version": 2,
+              "requestedModel": "deepseek-v4.1-flash",
+              "reportedModel": "deepseek-v4.1-flash-ioa",
+              "durationMs": 6517,
+              "finishReason": "tool-calls",
+              "cleanup": {
+                "kind": "normal",
+                "durationMs": 128
+              }
+            }
+          },
+          {
+            "phase": "coding-middle",
+            "time": "2026-10-26T16:55:56.456Z",
+            "model": "deepseek-v4.1-flash",
+            "purpose": "conversation",
+            "inputBytes": 63567,
+            "maxTokens": 4096,
+            "durationMs": 15697,
+            "usage": {
+              "inputTokens": 10240,
+              "outputTokens": 1991,
+              "cacheReadTokens": 0,
+              "cacheWriteTokens": 0,
+              "totalTokens": 12231
+            },
+            "finish": "tool-calls",
+            "reported": {
+              "kind": "codebuddy-server",
+              "version": 2,
+              "requestedModel": "deepseek-v4.1-flash",
+              "reportedModel": "deepseek-v4.1-flash-ioa",
+              "durationMs": 15692,
+              "finishReason": "tool-calls",
+              "cleanup": {
+                "kind": "normal",
+                "durationMs": 149
+              }
+            }
+          },
+          {
+            "phase": "summary",
+            "time": "2026-10-26T16:56:16.622Z",
+            "model": "deepseek-v4.1-flash",
+            "purpose": "compaction",
+            "inputBytes": 65462,
+            "maxTokens": 4096,
+            "durationMs": 12758,
+            "usage": {
+              "inputTokens": 10625,
+              "outputTokens": 1466,
+              "cacheReadTokens": 0,
+              "cacheWriteTokens": 0,
+              "totalTokens": 12091
+            },
+            "finish": "stop",
+            "reported": {
+              "kind": "codebuddy-server",
+              "version": 2,
+              "requestedModel": "deepseek-v4.1-flash",
+              "reportedModel": "deepseek-v4.1-flash-ioa",
+              "durationMs": 12751,
+              "finishReason": "stop",
+              "cleanup": {
+                "kind": "normal",
+                "durationMs": 126
+              }
+            }
+          },
+          {
+            "phase": "recovery",
+            "time": "2026-10-26T16:56:29.437Z",
+            "model": "deepseek-v4.1-flash",
+            "purpose": "conversation",
+            "inputBytes": 43653,
+            "maxTokens": 4096,
+            "durationMs": 6248,
+            "usage": {
+              "inputTokens": 9444,
+              "outputTokens": 28,
+              "cacheReadTokens": 0,
+              "cacheWriteTokens": 0,
+              "totalTokens": 9472
+            },
+            "finish": "stop",
+            "reported": {
+              "kind": "codebuddy-server",
+              "version": 2,
+              "requestedModel": "deepseek-v4.1-flash",
+              "reportedModel": "deepseek-v4.1-flash-ioa",
+              "durationMs": 6242,
+              "finishReason": "stop",
+              "cleanup": {
+                "kind": "normal",
+                "durationMs": 126
+              }
+            }
+          },
+          {
+            "phase": "comparison",
+            "time": "2026-10-26T18:55:13.644Z",
+            "model": "deepseek-v4.1-flash",
+            "purpose": "conversation",
+            "inputBytes": 4166,
+            "maxTokens": 4096,
+            "durationMs": 32872,
+            "usage": {
+              "inputTokens": 1103,
+              "outputTokens": 4096,
+              "cacheReadTokens": 0,
+              "cacheWriteTokens": 0,
+              "totalTokens": 5199
+            },
+            "finish": "max-tokens",
+            "reported": {
+              "kind": "codebuddy-server",
+              "version": 2,
+              "requestedModel": "deepseek-v4.1-flash",
+              "reportedModel": "deepseek-v4.1-flash-ioa",
+              "durationMs": 32865,
+              "finishReason": "max-tokens",
+              "cleanup": {
+                "kind": "forced",
+                "durationMs": 5067,
+                "reason": "cleanup-timeout"
+              }
+            }
+          },
+          {
+            "phase": "comparison",
+            "time": "2026-10-26T18:56:34.449Z",
+            "model": "deepseek-v4.1-flash",
+            "purpose": "conversation",
+            "inputBytes": 4166,
+            "maxTokens": 4096,
+            "durationMs": 34457,
+            "usage": {
+              "inputTokens": 1103,
+              "outputTokens": 4096,
+              "cacheReadTokens": 0,
+              "cacheWriteTokens": 0,
+              "totalTokens": 5199
+            },
+            "finish": "max-tokens",
+            "reported": {
+              "kind": "codebuddy-server",
+              "version": 2,
+              "requestedModel": "deepseek-v4.1-flash",
+              "reportedModel": "deepseek-v4.1-flash-ioa",
+              "durationMs": 34451,
+              "finishReason": "max-tokens",
+              "cleanup": {
+                "kind": "forced",
+                "durationMs": 5068,
+                "reason": "cleanup-timeout"
+              }
+            }
+          },
+          {
+            "phase": "comparison",
+            "time": "2026-10-26T18:57:08.910Z",
+            "model": "deepseek-v4.1-flash",
+            "purpose": "conversation",
+            "inputBytes": 2876,
+            "maxTokens": 4096,
+            "durationMs": 34426,
+            "usage": {
+              "inputTokens": 870,
+              "outputTokens": 4096,
+              "cacheReadTokens": 0,
+              "cacheWriteTokens": 0,
+              "totalTokens": 4966
+            },
+            "finish": "max-tokens",
+            "reported": {
+              "kind": "codebuddy-server",
+              "version": 2,
+              "requestedModel": "deepseek-v4.1-flash",
+              "reportedModel": "deepseek-v4.1-flash-ioa",
+              "durationMs": 34422,
+              "finishReason": "max-tokens",
+              "cleanup": {
+                "kind": "forced",
+                "durationMs": 5066,
+                "reason": "cleanup-timeout"
+              }
+            }
+          },
+          {
+            "phase": "comparison",
+            "time": "2026-10-26T18:58:29.852Z",
+            "model": "deepseek-v4.1-flash",
+            "purpose": "conversation",
+            "inputBytes": 2876,
+            "maxTokens": 4096,
+            "durationMs": 34292,
+            "usage": {
+              "inputTokens": 870,
+              "outputTokens": 4096,
+              "cacheReadTokens": 0,
+              "cacheWriteTokens": 0,
+              "totalTokens": 4966
+            },
+            "finish": "max-tokens",
+            "reported": {
+              "kind": "codebuddy-server",
+              "version": 2,
+              "requestedModel": "deepseek-v4.1-flash",
+              "reportedModel": "deepseek-v4.1-flash-ioa",
+              "durationMs": 34287,
+              "finishReason": "max-tokens",
+              "cleanup": {
+                "kind": "forced",
+                "durationMs": 5070,
+                "reason": "cleanup-timeout"
+              }
+            }
+          }
+        ]
+      },
+      "official": {
+        "attempts": 4,
+        "limit": 4,
+        "totals": {
+          "inputTokens": 2382,
+          "cacheReadTokens": 1536,
+          "cacheWriteTokens": 0,
+          "outputTokens": 16384,
+          "totalTokens": 20302
+        },
+        "entries": [
+          {
+            "phase": "comparison",
+            "time": "2026-10-26T18:55:46.521Z",
+            "model": "deepseek-flash",
+            "purpose": "conversation",
+            "inputBytes": 4166,
+            "maxTokens": 4096,
+            "durationMs": 22803,
+            "usage": {
+              "inputTokens": 1096,
+              "outputTokens": 4096,
+              "cacheReadTokens": 0,
+              "cacheWriteTokens": 0,
+              "totalTokens": 5192
+            },
+            "finish": "max-tokens",
+            "reported": {
+              "kind": "deepseek-messages",
+              "version": 1,
+              "model": "deepseek-flash"
+            }
+          },
+          {
+            "phase": "comparison",
+            "time": "2026-10-26T18:56:09.329Z",
+            "model": "deepseek-flash",
+            "purpose": "conversation",
+            "inputBytes": 4166,
+            "maxTokens": 4096,
+            "durationMs": 25116,
+            "usage": {
+              "inputTokens": 200,
+              "outputTokens": 4096,
+              "cacheReadTokens": 896,
+              "cacheWriteTokens": 0,
+              "totalTokens": 5192
+            },
+            "finish": "max-tokens",
+            "reported": {
+              "kind": "deepseek-messages",
+              "version": 1,
+              "model": "deepseek-flash"
+            }
+          },
+          {
+            "phase": "comparison",
+            "time": "2026-10-26T18:57:43.340Z",
+            "model": "deepseek-flash",
+            "purpose": "conversation",
+            "inputBytes": 2876,
+            "maxTokens": 4096,
+            "durationMs": 23014,
+            "usage": {
+              "inputTokens": 863,
+              "outputTokens": 4096,
+              "cacheReadTokens": 0,
+              "cacheWriteTokens": 0,
+              "totalTokens": 4959
+            },
+            "finish": "max-tokens",
+            "reported": {
+              "kind": "deepseek-messages",
+              "version": 1,
+              "model": "deepseek-flash"
+            }
+          },
+          {
+            "phase": "comparison",
+            "time": "2026-10-26T18:58:06.359Z",
+            "model": "deepseek-flash",
+            "purpose": "conversation",
+            "inputBytes": 2876,
+            "maxTokens": 4096,
+            "durationMs": 23490,
+            "usage": {
+              "inputTokens": 223,
+              "outputTokens": 4096,
+              "cacheReadTokens": 640,
+              "cacheWriteTokens": 0,
+              "totalTokens": 4959
+            },
+            "finish": "max-tokens",
+            "reported": {
+              "kind": "deepseek-messages",
+              "version": 1,
+              "model": "deepseek-flash"
+            }
+          }
+        ]
+      }
+    },
+    "comparison": [
+      {
+        "case": "queue",
+        "repeat": 1,
+        "channel": "codebuddy",
+        "inputHash": "8234eaacd7565c3873ca81017d87d39781af99fe0b2fb83ed90c5547d1a1b657",
+        "status": "FAILED",
+        "failureType": "SyntaxError",
+        "message": "Unexpected end of JSON input",
+        "durationMs": 32877,
+        "finish": {
+          "kind": "max-tokens"
+        },
+        "usage": {
+          "inputTokens": 1103,
+          "outputTokens": 4096,
+          "cacheReadTokens": 0,
+          "cacheWriteTokens": 0,
+          "totalTokens": 5199
+        },
+        "interpretation": "incomplete JSON at output cap; not a scored quality sample"
+      },
+      {
+        "case": "queue",
+        "repeat": 1,
+        "channel": "official",
+        "inputHash": "8234eaacd7565c3873ca81017d87d39781af99fe0b2fb83ed90c5547d1a1b657",
+        "status": "FAILED",
+        "failureType": "SyntaxError",
+        "message": "Unexpected end of JSON input",
+        "durationMs": 22808,
+        "finish": {
+          "kind": "max-tokens"
+        },
+        "usage": {
+          "inputTokens": 1096,
+          "outputTokens": 4096,
+          "cacheReadTokens": 0,
+          "cacheWriteTokens": 0,
+          "totalTokens": 5192
+        },
+        "interpretation": "incomplete JSON at output cap; not a scored quality sample"
+      },
+      {
+        "case": "queue",
+        "repeat": 2,
+        "channel": "official",
+        "inputHash": "8234eaacd7565c3873ca81017d87d39781af99fe0b2fb83ed90c5547d1a1b657",
+        "status": "FAILED",
+        "failureType": "SyntaxError",
+        "message": "Unexpected end of JSON input",
+        "durationMs": 25119,
+        "finish": {
+          "kind": "max-tokens"
+        },
+        "usage": {
+          "inputTokens": 200,
+          "outputTokens": 4096,
+          "cacheReadTokens": 896,
+          "cacheWriteTokens": 0,
+          "totalTokens": 5192
+        },
+        "interpretation": "incomplete JSON at output cap; not a scored quality sample"
+      },
+      {
+        "case": "queue",
+        "repeat": 2,
+        "channel": "codebuddy",
+        "inputHash": "8234eaacd7565c3873ca81017d87d39781af99fe0b2fb83ed90c5547d1a1b657",
+        "status": "FAILED",
+        "failureType": "SyntaxError",
+        "message": "Unexpected end of JSON input",
+        "durationMs": 34462,
+        "finish": {
+          "kind": "max-tokens"
+        },
+        "usage": {
+          "inputTokens": 1103,
+          "outputTokens": 4096,
+          "cacheReadTokens": 0,
+          "cacheWriteTokens": 0,
+          "totalTokens": 5199
+        },
+        "interpretation": "incomplete JSON at output cap; not a scored quality sample"
+      },
+      {
+        "case": "edits",
+        "repeat": 1,
+        "channel": "codebuddy",
+        "inputHash": "384a713fc0fbaf8ba01d49f203f7788109c678ea66215405a0688153530cc79e",
+        "status": "FAILED",
+        "failureType": "SyntaxError",
+        "message": "Unexpected end of JSON input",
+        "durationMs": 34430,
+        "finish": {
+          "kind": "max-tokens"
+        },
+        "usage": {
+          "inputTokens": 870,
+          "outputTokens": 4096,
+          "cacheReadTokens": 0,
+          "cacheWriteTokens": 0,
+          "totalTokens": 4966
+        },
+        "interpretation": "incomplete JSON at output cap; not a scored quality sample"
+      },
+      {
+        "case": "edits",
+        "repeat": 1,
+        "channel": "official",
+        "inputHash": "384a713fc0fbaf8ba01d49f203f7788109c678ea66215405a0688153530cc79e",
+        "status": "FAILED",
+        "failureType": "SyntaxError",
+        "message": "Unexpected end of JSON input",
+        "durationMs": 23018,
+        "finish": {
+          "kind": "max-tokens"
+        },
+        "usage": {
+          "inputTokens": 863,
+          "outputTokens": 4096,
+          "cacheReadTokens": 0,
+          "cacheWriteTokens": 0,
+          "totalTokens": 4959
+        },
+        "interpretation": "incomplete JSON at output cap; not a scored quality sample"
+      },
+      {
+        "case": "edits",
+        "repeat": 2,
+        "channel": "official",
+        "inputHash": "384a713fc0fbaf8ba01d49f203f7788109c678ea66215405a0688153530cc79e",
+        "status": "FAILED",
+        "failureType": "SyntaxError",
+        "message": "Unexpected end of JSON input",
+        "durationMs": 23494,
+        "finish": {
+          "kind": "max-tokens"
+        },
+        "usage": {
+          "inputTokens": 223,
+          "outputTokens": 4096,
+          "cacheReadTokens": 640,
+          "cacheWriteTokens": 0,
+          "totalTokens": 4959
+        },
+        "interpretation": "incomplete JSON at output cap; not a scored quality sample"
+      },
+      {
+        "case": "edits",
+        "repeat": 2,
+        "channel": "codebuddy",
+        "inputHash": "384a713fc0fbaf8ba01d49f203f7788109c678ea66215405a0688153530cc79e",
+        "status": "FAILED",
+        "failureType": "SyntaxError",
+        "message": "Unexpected end of JSON input",
+        "durationMs": 34295,
+        "finish": {
+          "kind": "max-tokens"
+        },
+        "usage": {
+          "inputTokens": 870,
+          "outputTokens": 4096,
+          "cacheReadTokens": 0,
+          "cacheWriteTokens": 0,
+          "totalTokens": 4966
+        },
+        "interpretation": "incomplete JSON at output cap; not a scored quality sample"
+      }
+    ],
+    "codingScores": {
+      "start": {
+        "score": {
+          "case": "queue",
+          "passed": false,
+          "exitCode": 1,
+          "tests": 5,
+          "pass": 0,
+          "fail": 5
+        },
+        "turnCompleted": false,
+        "testsUnmodified": true
+      },
+      "middle": {
+        "score": {
+          "case": "edits",
+          "passed": true,
+          "exitCode": 0,
+          "tests": 5,
+          "pass": 5,
+          "fail": 0
+        },
+        "turnCompleted": false,
+        "testsUnmodified": true
+      }
+    },
+    "manualAndAutomaticSummaryRecovery": "PASS; coding-stage assertions reached after summary/recovery checks",
+    "forcedCleanupRequests": 5
+  },
+  "sourceFreezeChanges": [],
+  "historicalBudgetHashes": {
+    "artifacts/live/budget.json": "ac2b9eb94eb72f6bc752b2aa5da3e185d96461c60cf63def77d1c660b9d5987e",
+    "artifacts/server-live/budget.json": "557071fd6adb7b922d9eb2f83f056c231542c4ba10ba7fc5b6fc2be926490af5",
+    "artifacts/daily-live/budget.json": "586edad7f4d5ba6859e8c3f09bd952382d396fd4ea20b5a41be9db14426b2558"
+  },
+  "temporaryCredentialsRemoved": true,
+  "scope": {
+    "dailyProfileInstalled": false,
+    "committed": false,
+    "pushed": false,
+    "published": false
+  }
+}

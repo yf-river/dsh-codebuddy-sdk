@@ -1,7 +1,7 @@
 {
   "name": "dsh-codebuddy-sdk",
   "version": "0.1.5",
-  "description": "DeepSeek Harness plugin: CodeBuddy (Tencent Agent SDK) as an LLM provider (ctx.llm).",
+  "description": "DeepSeek Harness provider using the official CodeBuddy Server with DSH-owned history and tools.",
   "type": "module",
   "main": "dist/index.js",
   "exports": {
@@ -13,11 +13,15 @@
     "dist",
     "cordis.patch.yml",
     "README.md",
+    "README.zh.md",
+    "assets/readme",
+    "docs",
     "LICENSE"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "test:ci": "node --import tsx --test tests/smoke.test.mjs tests/unit-*.mjs",
+    "test:integration": "npm run build && node scripts/test-sdk.mjs",
     "test": "node --import tsx --test tests/*.mjs",
     "typecheck": "tsc --noEmit",
     "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",
@@ -38,12 +42,14 @@
     "@deepseek-ai/dsh-credentials": "0.2.1-rc.3",
     "@deepseek-ai/dsh-llm": "0.2.1-rc.3",
     "@deepseek-ai/schemastery": "~3.18.5",
-    "@tencent-ai/agent-sdk": "^0.3.287",
-    "change-case": "^5.4.4",
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@tencent-ai/agent-sdk": "0.3.287",
+    "@tencent-ai/codebuddy-code": "2.172.1",
     "zod": "^4.0.0"
   },
   "devDependencies": {
     "@types/node": "^26.6.5",
+    "change-case": "^5.4.4",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2"
   },
@@ -54,10 +60,9 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/RetiredPhysicist/dsh-plugins.git",
-    "directory": "packages/dsh-codebuddy-sdk"
+    "url": "git+https://github.com/yf-river/dsh-codebuddy-sdk.git"
   },
   "engines": {
-    "node": ">=26"
+    "node": ">=24"
   }
 }

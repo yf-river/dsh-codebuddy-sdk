@@ -1,7 +1,4 @@
-# Plugin bundle for dsh-codebuddy-sdk.
-# Registers the CodeBuddy provider adapter into ctx.llm.
-# Multi-turn history, tool calls, and streaming are implemented; the CLI is
-# invoked per Harness step and resumed from an imported session file.
+# 注册 CodeBuddy provider；DSH 提供完整历史，官方 Server 执行单次模型生成。
 - insert:
     - id: codebuddy
       name: 'dsh-codebuddy-sdk'

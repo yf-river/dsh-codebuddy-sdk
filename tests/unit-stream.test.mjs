@@ -1,145 +1,69 @@
-import { describe, it } from 'node:test'
+import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { translateStep } from '../src/stream.ts'
 import { CodeBuddyToolBridge } from '../src/tool-bridge.ts'
-
-/** Feed a finite list of messages, then report done; never call return(). */
-function iteratorOf(events) {
-  let index = 0
-  return {
-    returnCalls: 0,
-    async next() {
-      if (index >= events.length) return { done: true, value: undefined }
-      return { done: false, value: events[index++] }
-    },
-    async return() {
-      this.returnCalls += 1
-      return { done: true, value: undefined }
-    },
-  }
-}
-
-async function collect(events, bridge = new CodeBuddyToolBridge([])) {
-  const source = iteratorOf(events)
-  const chunks = []
-  const step = translateStep(source, bridge)
-  while (true) {
-    const next = await step.next()
-    if (next.done) return { chunks, status: next.value, source }
-    chunks.push(next.value)
-  }
-}
-
-function assistant(content, stopReason = 'end_turn') {
-  return {
-    type: 'assistant',
-    uuid: 'u1',
-    session_id: 's1',
-    parent_tool_use_id: null,
-    message: {
-      id: 'msg1',
-      type: 'message',
-      role: 'assistant',
-      model: 'hy3',
-      content,
-      stop_reason: stopReason,
-      stop_sequence: null,
-      usage: { input_tokens: 3, output_tokens: 4 },
-    },
-  }
-}
-
-function streamEvent(event) {
-  return { type: 'stream_event', uuid: 'u1', session_id: 's1', parent_tool_use_id: null, event }
-}
-
-function successResult() {
-  return {
-    type: 'result',
-    subtype: 'success',
-    uuid: 'u1',
-    session_id: 's1',
-    duration_ms: 1,
-    duration_api_ms: 1,
-    is_error: false,
-    num_turns: 1,
-    result: 'hi',
-    total_cost_usd: 0,
-    usage: { input_tokens: 3, output_tokens: 4 },
-    permission_denials: [],
-  }
-}
-
-describe('translateStep', () => {
-  it('translates text deltas and a successful result', async () => {
-    const { chunks, status } = await collect([
-      streamEvent({ type: 'content_block_start', index: 0, content_block: { type: 'text', text: '' } }),
-      streamEvent({ type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: 'hi' } }),
-      assistant([{ type: 'text', text: 'hi' }]),
-      successResult(),
-    ])
-    assert.deepEqual(chunks.map((chunk) => chunk.type), [
-      'block-start', 'text-delta', 'block-end', 'usage', 'finish',
-    ])
-    assert.deepEqual(chunks.at(-1).reason, { kind: 'stop' })
-    assert.equal(status.ended, true)
-  })
-
-  it('ends a tool-use turn as tool-calls without closing the iterator', async () => {
-    const bridge = new CodeBuddyToolBridge([])
-    const { chunks, status, source } = await collect([
-      streamEvent({
-        type: 'content_block_start',
-        index: 0,
-        content_block: { type: 'tool_use', id: 'call_1', name: 'Read', input: {} },
-      }),
-      streamEvent({
-        type: 'content_block_delta',
-        index: 0,
-        delta: { type: 'input_json_delta', partial_json: '{"path":"a.ts"}' },
-      }),
-      streamEvent({ type: 'content_block_stop', index: 0 }),
-      assistant([{ type: 'tool_use', id: 'call_1', name: 'Read', input: { path: 'a.ts' } }], 'tool_use'),
-    ], bridge)
-    const toolCalls = chunks.filter((chunk) => chunk.type === 'block-end' && chunk.block.type === 'tool-call')
-    assert.equal(toolCalls.length, 1)
-    assert.equal(toolCalls[0].block.arguments, '{"path":"a.ts"}')
-    assert.equal(chunks.at(-1).reason.kind, 'tool-calls')
-    assert.equal(status.awaitingTool, true)
-    assert.equal(status.ended, false)
-    // Returning early from a `for await` would have called this and killed the CLI.
-    assert.equal(source.returnCalls, 0)
-  })
-
-  it('reports a result error as an error finish', async () => {
-    const { chunks } = await collect([
-      {
-        type: 'result',
-        subtype: 'error_during_execution',
-        uuid: 'u1',
-        session_id: 's1',
-        duration_ms: 1,
-        duration_api_ms: 1,
-        is_error: true,
-        num_turns: 1,
-        total_cost_usd: 0,
-        usage: { input_tokens: 0, output_tokens: 0 },
-        permission_denials: [],
-        errors: ['boom'],
-      },
-    ])
-    assert.deepEqual(chunks.at(-1).reason, {
-      kind: 'error',
-      failure: { message: 'boom', code: 'CODEBUDDY_ERROR' },
-    })
-  })
-
-  it('turns an assistant error field into an error finish', async () => {
-    const message = { ...assistant([{ type: 'text', text: 'partial' }]), error: 'upstream down' }
-    const { chunks } = await collect([message])
-    assert.deepEqual(chunks.at(-1).reason, {
-      kind: 'error',
-      failure: { message: 'upstream down', code: 'CODEBUDDY_ERROR' },
-    })
-  })
+import { BlockAssembler } from '@deepseek-ai/dsh-llm'
+const model='deepseek-v4.1-flash'
+const raw=(delta={},finish_reason=null,usage)=>({type:'model',event:{model,choices:[{delta,finish_reason}],...(usage?{usage}:{})}})
+const done=(output=[],usage)=>({type:'response_done',response:{output,usage}})
+const text=t=>({type:'message',content:[{type:'output_text',text:t}]})
+const tool=(id='a')=>({type:'function_call',callId:id,name:'read',arguments:'{"path":"a"}'})
+async function collect(events){const source=(async function*(){yield*events})();const chunks=[];for await(const chunk of translateStep(source,new CodeBuddyToolBridge([{name:'read',description:'',parameters:{type:'object'}}]),model))chunks.push(chunk);const assembled=new BlockAssembler();chunks.forEach(x=>assembled.push(x));return {chunks,assembled}}
+test('推理和正文只消费一次，保留模型流中的顺序',async()=>{
+ const {assembled}=await collect([raw({reasoning_content:'why'}),raw({content:'answer'}),{type:'output_text_delta',delta:'answer'},raw({},'stop',{prompt_tokens:40,completion_tokens:7}),done([text('answer')])])
+ assert.deepEqual(assembled.blocks(),[{type:'reasoning',text:'why'},{type:'text',text:'answer'}])
+ assert.equal(assembled.usage.inputTokens,40)
+})
+test('缓存输入采用互斥口径，缺失计数不伪装成零',async()=>{
+ const {assembled}=await collect([raw({content:'ok'},'stop',{prompt_tokens:40,completion_tokens:7,prompt_tokens_details:{cached_tokens:10}}),done([text('ok')])])
+ assert.deepEqual(assembled.usage,{inputTokens:30,outputTokens:7,cacheReadTokens:10,totalTokens:47})
+ const unknown=await collect([raw({content:'ok'}),done([text('ok')],{inputTokens:0,outputTokens:0})])
+ assert.equal(unknown.chunks.some(x=>x.type==='usage'),false)
+})
+test('长度截断保留真实结束原因',async()=>{
+ const {chunks}=await collect([raw({content:'partial'},'length'),done([text('partial')])]);assert.equal(chunks.at(-1).reason.kind,'max-tokens')
+})
+test('同名同参数工具保持各自调用 ID',async()=>{
+ const calls=['a','b'].map((id,index)=>({index,id,function:{name:'read',arguments:'{"path":"a"}'}}))
+ const {assembled,chunks}=await collect([raw({tool_calls:calls},'tool_calls'),done([tool('a'),tool('b')])])
+ assert.deepEqual(assembled.blocks().map(x=>x.id),['a','b']);assert.equal(chunks.at(-1).reason.kind,'tool-calls')
+})
+test('错误模型、工具 ID 不一致和不完整流明确失败',async()=>{
+ await assert.rejects(()=>collect([{type:'model',event:{model:'other',choices:[]}}]),/返回模型/)
+ await assert.rejects(()=>collect([raw({tool_calls:[{index:0,id:'a',function:{name:'read',arguments:'{}'}}]}),done([tool('b')])]),/ID.*不一致/)
+ await assert.rejects(()=>collect([raw({content:'partial'})]),/完整输出之前/)
+})
+test('空回复和仅推理的正常结束不能冒充回答',async()=>{
+ for(const events of [[raw({},'stop'),done([])],[raw({reasoning_content:'thinking'},'stop'),done([])]])
+  await assert.rejects(()=>collect(events),e=>e.code==='EMPTY_RESPONSE')
+})
+test('拒绝正文可见并保留失败原因，content_filter 不标为成功',async()=>{
+ const {assembled,chunks}=await collect([raw({refusal:'无法处理此请求'},'content_filter'),done([{type:'message',content:[{type:'refusal',refusal:'无法处理此请求'}]}])])
+ assert.deepEqual(assembled.blocks(),[{type:'text',text:'无法处理此请求'}])
+ assert.equal(chunks.at(-1).reason.kind,'error');assert.equal(chunks.at(-1).reason.failure.code,'REFUSAL')
+ const filtered=await collect([raw({},'content_filter'),done([])])
+ assert.equal(filtered.chunks.at(-1).reason.failure.code,'REFUSAL')
+})
+test('截断及损坏工具调用不会发出可执行 block-end',async()=>{
+ for(const [args,finish] of [['{}','length'],['{','tool_calls'],['null','tool_calls']]){
+  const chunks=[]
+  const events=[raw({tool_calls:[{index:0,id:'a',function:{name:'read',arguments:args}}]},finish),done([{...tool(),arguments:args}])]
+  await assert.rejects(async()=>{for await(const x of translateStep((async function*(){yield*events})(),new CodeBuddyToolBridge([{name:'read',description:'',parameters:{type:'object'}}]),model))chunks.push(x)})
+  assert.ok(!chunks.some(x=>x.type==='block-end'&&x.block.type==='tool-call'))
+ }
+})
+test('整批工具全部校验后才交付，后一个重复 ID 不会提前执行第一个',async()=>{
+ const chunks=[]
+ await assert.rejects(async()=>{for await(const x of translateStep((async function*(){yield raw({tool_calls:[0,1].map(index=>({index,id:'a',function:{name:'read',arguments:'{}'}}))},'tool_calls');yield done([0,1].map(()=>({...tool(),arguments:'{}'})))})(),new CodeBuddyToolBridge([{name:'read',description:'',parameters:{type:'object'}}]),model))chunks.push(x)},/重复/)
+ assert.ok(!chunks.some(x=>x.type==='block-end'&&x.block.type==='tool-call'))
+})
+test('完整输出不得改写流式工具参数或遗漏工具',async()=>{
+ const call={index:0,id:'a',function:{name:'read',arguments:'{}'}}
+ await assert.rejects(()=>collect([raw({tool_calls:[call]},'tool_calls'),done([tool()])]),/参数.*不一致/)
+ await assert.rejects(()=>collect([raw({tool_calls:[call]},'tool_calls'),done([])]),/数量.*不一致/)
+})
+test('错误结束原因即使带有合法工具也不会交付执行',async()=>{
+ const chunks=[]
+ await assert.rejects(async()=>{for await(const x of translateStep((async function*(){yield raw({tool_calls:[{index:0,id:'a',function:{name:'read',arguments:'{}'}}]},'error');yield done([{...tool(),arguments:'{}'}])})(),new CodeBuddyToolBridge([{name:'read',description:'',parameters:{type:'object'}}]),model))chunks.push(x)},e=>e.code==='INVALID_RESPONSE')
+ assert.ok(!chunks.some(x=>x.type==='block-end'&&x.block.type==='tool-call'))
 })

@@ -1,261 +1,145 @@
-/**
- * CodeBuddy (Tencent Agent SDK) as a DeepSeek Harness LLM provider.
- *
- * The Harness owns tool execution, so one conversation is driven one step at a
- * time: a `stream()` call that ends on a tool call returns `tool-calls`, the
- * Harness runs the tool, and the next `stream()` call delivers the result.
- *
- * One CodeBuddy CLI query spans the whole conversation. The MCP handlers it
- * invokes stay pending across steps; the next step resolves them with the
- * Harness's real tool results, which lets the CLI continue the same turn. Only
- * the first step sends a prompt — later steps are continuations of it.
- */
-
 import type { Context } from '@deepseek-ai/cordis'
-import { LlmAdapter, LlmError } from '@deepseek-ai/dsh-llm'
+import { LlmAdapter, LlmError, ReasoningEffortId } from '@deepseek-ai/dsh-llm'
 import type { GenerateOptions, LlmModelInfo, LlmResolvedModelInfo, StreamChunk } from '@deepseek-ai/dsh-llm'
-import { query, type Message as CodeBuddyMessage, type ModelInfo } from '@tencent-ai/agent-sdk'
+import { unstable_v2_createSession, type Session, type SessionOptions } from '@tencent-ai/agent-sdk'
 import z from '@deepseek-ai/schemastery'
-import { PROVIDER_ID, lastUserText } from './convert.js'
-import { FALLBACK_MODELS, modelsFromSdk, resolveModel, type CodeBuddyModel } from './models.js'
+import { modelsFromRaw, type CodeBuddyModel } from './models.js'
 import { translateStep } from './stream.js'
 import { CodeBuddyToolBridge } from './tool-bridge.js'
-import { QueryReaper } from './teardown.js'
+import { requestHistory, unsupported } from './history.js'
+import { llmError } from './errors.js'
+import { runWorker } from './runtime.js'
 
 export interface Config {
-  /** Provider route advertised to the harness (default `codebuddy`). */
   provider?: string
-  /** Default model id (default `codebuddy`). */
   model?: string
-  /** Path to the CodeBuddy CLI when it is not on `PATH`. */
   pathToCodebuddyCode?: string
-  /** Working directory for the CLI; defaults to the process cwd. */
   cwd?: string
-  /** Permission mode handed to the CLI. Defaults to `bypassPermissions`. */
-  permissionMode?: string
-  /** Context window override for every model. */
   contextWindow?: number
-  /** Max output tokens override for every model. */
   maxTokens?: number
 }
-
 export const Config: z<Config> = z.object({
   provider: z.string().description('Provider route (default codebuddy)'),
-  model: z.string().description('Default model id (default codebuddy)'),
-  pathToCodebuddyCode: z.string().description('Path to the CodeBuddy CLI'),
+  model: z.string().description('Default exact model id (default deepseek-v4.1-flash)'),
+  pathToCodebuddyCode: z.string().description('Deprecated: remove this option when using the Server runtime'),
   cwd: z.string().description('Working directory for the CLI'),
-  permissionMode: z.string().description('Permission mode passed to the CLI'),
-  contextWindow: z.number().description('Context window override for every model'),
-  maxTokens: z.number().description('Max output tokens override for every model'),
+  contextWindow: z.number().description('Context window override'),
+  maxTokens: z.number().description('Maximum output tokens sent to the CLI'),
 })
-
 export const name = 'codebuddy'
 export const inject = ['llm']
 
-/** One live conversation: the CLI query plus the tool bridge spanning its steps. */
-interface Conversation {
-  iterator: AsyncIterator<CodeBuddyMessage>
-  bridge: CodeBuddyToolBridge
-  reaper: QueryReaper
-  /** Tool call ids the step that just ended advertised, in order. */
-  awaiting: string[]
-  controller: AbortController
-}
-
-interface ToolResultLike {
-  role: 'tool'
-  content: Array<{ type: string; text?: string }>
-  source: { kind?: string; callId?: string }
-  isError?: boolean
-}
-
-function errorMessage(error: unknown): string {
-  if (error instanceof Error) return error.message
-  if (error && typeof error === 'object' && 'message' in error) return String(error.message)
-  return String(error)
-}
-
-/** Results the Harness appended for the calls the previous step advertised. */
-function toolResultsFrom(
-  options: GenerateOptions,
-  awaiting: readonly string[],
-): Map<string, { content: string; isError?: boolean }> {
-  const wanted = new Set(awaiting)
-  const results = new Map<string, { content: string; isError?: boolean }>()
-  for (const candidate of options.messages as unknown as ToolResultLike[]) {
-    if (candidate.role !== 'tool') continue
-    const callId = candidate.source.callId
-    if (callId === undefined || !wanted.has(callId)) continue
-    const content = candidate.content
-      .map((block) => block.type === 'text' ? block.text ?? '' : `[${block.type}]`)
-      .filter(Boolean)
-      .join('\n')
-    results.set(callId, { content, ...candidate.isError === true ? { isError: true } : {} })
-  }
-  return results
-}
-
 class CodeBuddyAdapter extends LlmAdapter {
-  private models: CodeBuddyModel[] = [...FALLBACK_MODELS]
-  private discovered = false
-  private readonly conversations = new Map<string, Conversation>()
+  private models: CodeBuddyModel[] = []
+  private discovery?: Promise<void>
+  private discoverySession?: Session
+  private readonly active = new Set<ReturnType<typeof runWorker>>()
+  private disposed = false
 
   constructor(private readonly config: Config) {
     super()
+    if (config.pathToCodebuddyCode) unsupported('pathToCodebuddyCode 不适用于 Server 接口；请移除此配置，使用锁定的官方运行时')
   }
+  override providerInfo(provider: string) { return { id: provider, name: 'CodeBuddy' } }
 
-  override providerInfo(provider: string) {
-    return { id: provider, name: 'CodeBuddy' }
-  }
-
-  /** Adopt the CLI's own catalog once; discovery costs a CLI start. */
-  private async refreshModels(): Promise<void> {
-    if (this.discovered) return
-    this.discovered = true
-    const discovery = query({ prompt: '', options: { tools: [] } })
-    const reaper = new QueryReaper(discovery, 'discover')
-    try {
-      const supported: ModelInfo[] = await discovery.supportedModels()
-      const mapped = modelsFromSdk(supported)
-      if (mapped.length > 0) this.models = mapped
-    } catch {
-      // Best-effort: the fallback catalog keeps the route usable and the CLI
-      // reports the real model error on the first request.
-    } finally {
-      await reaper.close()
+  private sdkOptions(): SessionOptions {
+    return {
+      cwd: this.config.cwd ?? process.cwd(), executable: process.execPath,
+      pathToCodebuddyCode: this.config.pathToCodebuddyCode,
+      tools: [], strictMcpConfig: true, settingSources: [],
+      systemPrompt: ' ', permissionMode: 'default',
+      env: {
+        DISABLE_AUTOUPDATER: '1', CODEBUDDY_DISABLE_AUTO_MEMORY: '1',
+        CODEBUDDY_CODE_DISABLE_AUTO_MEMORY: '1', CODEBUDDY_PRE_MESSAGE_COMPACT: '0',
+        CODEBUDDY_CODE_DISABLE_BACKGROUND_TASKS: '1',
+        // 固定 SDK 所带 CLI 的开关，禁止额外注入 CODEBUDDY.md / rules。
+        CODEBUDDY_DISABLE_SYSTEM_REMINDER_MD: '1',
+      },
     }
+  }
+
+  private async refreshModels(): Promise<void> {
+    this.discovery ??= (async () => {
+      const discovery = unstable_v2_createSession(this.sdkOptions())
+      this.discoverySession = discovery
+      try {
+        await discovery.connect()
+        this.models = modelsFromRaw(await discovery.getAvailableModelsRaw())
+      } finally { discovery.close(); if (this.discoverySession === discovery) this.discoverySession = undefined }
+    })().catch(error => { this.discovery = undefined; throw error })
+    await this.discovery
   }
 
   override async listModels(provider: string): Promise<readonly LlmModelInfo[]> {
     await this.refreshModels()
-    return this.models.map((model) => ({
-      provider,
-      id: model.id,
-      name: model.name,
-      inputModalities: [...model.input],
-    }))
+    return this.models.map(model => ({ provider, id: model.id, name: model.name, inputModalities: ['text'] }))
   }
 
   override async resolveModel(provider: string, model: string): Promise<LlmResolvedModelInfo> {
     await this.refreshModels()
-    const resolved = resolveModel(this.models, model) ?? this.models.find((candidate) => candidate.id === model) ?? {
-      id: model,
-      name: model,
-      reasoning: false,
-      input: ['text'] as Array<'text' | 'image'>,
-      contextWindow: this.config.contextWindow ?? 131_072,
-      maxTokens: this.config.maxTokens ?? 8192,
-    }
+    const found = this.models.find(candidate => candidate.id === model)
+    if (!found) unsupported(`CodeBuddy 模型目录中没有精确模型 id：${model}`)
+    const contextWindow = this.config.contextWindow ?? found.contextWindow
     return {
-      provider,
-      id: resolved.id,
-      name: resolved.name,
-      inputModalities: [...resolved.input],
-      context: { contextWindow: this.config.contextWindow ?? resolved.contextWindow },
-      defaultMaxTokens: this.config.maxTokens ?? resolved.maxTokens,
-    }
-  }
-
-  private startConversation(options: GenerateOptions, model: string): Conversation {
-    const bridge = new CodeBuddyToolBridge(options.tools ?? [])
-    const controller = new AbortController()
-    if (options.signal?.aborted) controller.abort()
-    else options.signal?.addEventListener('abort', () => controller.abort(), { once: true })
-    const child = query({
-      prompt: lastUserText(options.messages) || '[continue]',
-      options: {
-        cwd: this.config.cwd ?? process.cwd(),
-        abortController: controller,
-        tools: [],
-        permissionMode: (this.config.permissionMode ?? 'bypassPermissions') as 'bypassPermissions',
-        includePartialMessages: true,
-        systemPrompt: options.system,
-        model,
-        ...this.config.pathToCodebuddyCode === undefined
-          ? {}
-          : { pathToCodebuddyCode: this.config.pathToCodebuddyCode },
-        ...(options.tools ?? []).length === 0
-          ? {}
-          : { mcpServers: { [bridge.server.name]: bridge.server } },
-      },
-    })
-    return {
-      iterator: child[Symbol.asyncIterator](),
-      bridge,
-      reaper: new QueryReaper(child, `conversation:${model}`),
-      awaiting: [],
-      controller,
+      provider, id: found.id, name: found.name, inputModalities: ['text'],
+      ...(contextWindow === undefined ? {} : { context: { contextWindow } }),
+      defaultMaxTokens: this.config.maxTokens ?? found.maxTokens,
+      ...(found.efforts?.length ? { reasoning: {
+        efforts: found.efforts.map(id => ({ id: ReasoningEffortId(id), name: id })),
+        ...(found.defaultEffort ? { defaultEffort: ReasoningEffortId(found.defaultEffort) } : {}),
+      } } : {}),
     }
   }
 
   override async *stream(options: GenerateOptions): AsyncIterable<StreamChunk> {
-    const provider = options.provider || this.config.provider || PROVIDER_ID
-    const model = options.model || this.config.model || FALLBACK_MODELS[0]!.id
-    // Keyed by session so concurrent subagents each own an independent CLI and
-    // do not resolve one another's pending tool calls.
-    const key = options.sessionId ?? '__default__'
-    let conversation = this.conversations.get(key)
-    if (conversation === undefined) {
-      conversation = this.startConversation(options, model)
-      this.conversations.set(key, conversation)
-    }
-
-    // Resolve the handlers the previous step left waiting. The CLI continues
-    // the same turn as soon as the Harness's real result arrives.
-    const results = toolResultsFrom(options, conversation.awaiting)
-    for (const callId of conversation.awaiting) {
-      const result = results.get(callId)
-      if (result === undefined) continue
-      conversation.bridge.deliver(callId, {
-        content: [{ type: 'text', text: result.content }],
-        ...result.isError === true ? { isError: true } : {},
-      })
-    }
-    conversation.awaiting = []
-
+    if (this.disposed) unsupported('CodeBuddy provider 已关闭')
+    options.signal?.throwIfAborted()
+    if (options.temperature !== undefined || options.stop?.length) unsupported('官方接口尚未验证 temperature / stop 透传；请移除这些参数')
+    const model = options.model || this.config.model || 'deepseek-v4.1-flash'
+    if (/^(codebuddy|default|auto)$/i.test(model)) unsupported('请指定精确 CodeBuddy 模型 id')
+    const maxTokens = options.maxTokens ?? this.config.maxTokens
+    if (maxTokens !== undefined && (!Number.isSafeInteger(maxTokens) || maxTokens <= 0)) unsupported('maxTokens 必须是正整数')
+    const effort = options.reasoningEffort
+    if (effort !== undefined && !['off', 'low', 'medium', 'high', 'xhigh', 'max', 'minimal'].includes(effort)) unsupported(`不支持 reasoningEffort=${effort}`)
+    const history = requestHistory(options)
+    const bridge = new CodeBuddyToolBridge(options.tools ?? [])
+    const worker = runWorker({ ...history, model, cwd: this.config.cwd ?? process.cwd(), tools: options.tools ?? [], maxTokens, effort }, options.signal)
+    this.active.add(worker)
+    const startedAt = performance.now()
+    let reportedModel: string | undefined
     try {
-      const step: AsyncGenerator<StreamChunk, import('./stream.js').StepStatus, void> =
-        translateStep(conversation.iterator, conversation.bridge, options.signal)
+      const step = translateStep(worker.messages(), bridge, model)
       while (true) {
-        const next: IteratorResult<StreamChunk, import('./stream.js').StepStatus> = await step.next()
-        if (next.done) {
-          if (next.value.ended) await this.finishConversation(key)
-          break
-        }
-        const value = next.value as StreamChunk | import('./stream.js').StepStatus
-        if (!('type' in value)) break
-        const chunk: StreamChunk = value
-        if (chunk.type === 'block-end' && chunk.block.type === 'tool-call') {
-          conversation.awaiting.push(chunk.block.id)
-        }
-        yield chunk
+        const next = await step.next()
+        if (next.done) { reportedModel = next.value.model; break }
+        const chunk = next.value as StreamChunk
+        if (chunk.type === 'finish') {
+          const end = await step.next()
+          if (!end.done) throw new Error('模型 finish 后仍有内容')
+          reportedModel = end.value.model
+          const cleanup = await worker.verify()
+          yield { ...chunk, replayState: { response: { kind: 'codebuddy-server', version: 2, requestedModel: model, reportedModel, durationMs: Math.round(performance.now() - startedAt), finishReason: chunk.reason.kind, cleanup } } }
+          return
+        } else yield chunk
       }
     } catch (error) {
-      conversation.bridge.failAll(`CodeBuddy provider "${provider}" failed: ${errorMessage(error)}`)
-      await this.finishConversation(key)
-      throw new LlmError(`CodeBuddy provider "${provider}" failed: ${errorMessage(error)}`, 'CODEBUDDY_ERROR', {
-        cause: error instanceof Error ? error : undefined,
-      })
-    }
+      if (options.signal?.aborted) yield { type: 'finish', reason: { kind: 'aborted', failure: { message: 'CodeBuddy 请求已取消', code: 'ABORTED' } } }
+      else if (error instanceof LlmError) throw error
+      else throw llmError(error)
+    } finally { worker.stop(); await worker.done; this.active.delete(worker) }
   }
 
-  private async finishConversation(key: string): Promise<void> {
-    const conversation = this.conversations.get(key)
-    if (conversation === undefined) return
-    this.conversations.delete(key)
-    conversation.bridge.failAll('conversation ended')
-    await conversation.reaper.close()
-  }
-
-  /** Release every CLI when the plugin is disposed. */
   async dispose(): Promise<void> {
-    await Promise.all([...this.conversations.keys()].map((key) => this.finishConversation(key)))
+    this.disposed = true
+    this.discoverySession?.close()
+    for (const worker of this.active) worker.stop()
+    await Promise.all([...this.active].map(worker => worker.done))
+    this.active.clear()
   }
 }
 
 export function apply(ctx: Context, config: Config): void {
-  const provider = config.provider ?? PROVIDER_ID
   const adapter = new CodeBuddyAdapter(config)
-  ctx.llm.registerAdapter([provider], adapter)
-  ctx.effect(() => () => { void adapter.dispose() })
+  ctx.llm.registerAdapter([config.provider ?? name], adapter)
+  ctx.effect(() => () => adapter.dispose())
 }

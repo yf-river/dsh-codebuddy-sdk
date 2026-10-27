@@ -1,79 +1,29 @@
-/**
- * CodeBuddy model catalog and capability estimation.
- *
- * The CLI reports the available model ids but little else, so capacity is
- * estimated from the id with the same rules the Pi adapter uses.
- */
+import type { RawLanguageModel } from '@tencent-ai/agent-sdk'
 
-import type { ModelInfo } from '@tencent-ai/agent-sdk'
+export function sameModel(requested: string, reported: string): boolean {
+  return requested.replace(/-ioa$/, '') === reported.replace(/-ioa$/, '')
+}
 
 export interface CodeBuddyModel {
   id: string
   name: string
-  reasoning: boolean
-  input: Array<'text' | 'image'>
-  contextWindow: number
-  maxTokens: number
+  contextWindow?: number
+  maxTokens?: number
+  efforts?: string[]
+  defaultEffort?: string
 }
 
-const DEFAULT_CONTEXT = 131_072
-const DEFAULT_MAX_TOKENS = 8192
-
-function detectThinking(id: string): boolean {
-  return /claude|gemini|gpt-5|hy3|deepseek|glm/i.test(id)
-}
-
-function detectImages(id: string): boolean {
-  return /claude|gemini|gpt/i.test(id)
-}
-
-function estimateContext(id: string): number {
-  const lower = id.toLowerCase()
-  if (lower.includes('gemini')) return 1_048_576
-  if (lower.includes('claude') || lower.includes('gpt')) return 200_000
-  return DEFAULT_CONTEXT
-}
-
-function estimateMaxTokens(id: string): number {
-  return id.toLowerCase().includes('gpt') ? 16_384 : DEFAULT_MAX_TOKENS
-}
-
-export const FALLBACK_MODELS: CodeBuddyModel[] = [{
-  id: 'hy3-preview-agent-ioa',
-  name: 'Hunyuan 3 Preview',
-  reasoning: true,
-  input: ['text'],
-  contextWindow: DEFAULT_CONTEXT,
-  maxTokens: DEFAULT_MAX_TOKENS,
-}]
-
-export function modelsFromSdk(supported: readonly ModelInfo[]): CodeBuddyModel[] {
-  return supported
-    // The published `.d.ts` describes `value`/`displayName`, while the CLI in
-    // the wild returns `id`/`name`; accept both rather than dropping the
-    // catalog on one of them.
-    .map((model) => {
-      const raw = model as ModelInfo & { id?: string; name?: string }
-      const id = raw.id ?? raw.value ?? ''
-      const name = raw.name ?? raw.displayName ?? id
-      return { id, name }
-    })
-    .filter((model) => model.id)
-    .map((model) => ({
-      id: model.id,
-      name: model.name,
-      reasoning: detectThinking(model.id),
-      input: detectImages(model.id) ? ['text', 'image'] as const : ['text'] as const,
-      contextWindow: estimateContext(model.id),
-      maxTokens: estimateMaxTokens(model.id),
-    }))
-}
-
-export function resolveModel(
-  models: readonly CodeBuddyModel[],
-  input: string,
-): CodeBuddyModel | undefined {
-  const lower = input.toLowerCase()
-  return models.find((model) => model.id.toLowerCase() === lower)
-    ?? models.find((model) => model.id.toLowerCase().includes(lower))
+export function modelsFromRaw(models: readonly RawLanguageModel[]): CodeBuddyModel[] {
+  return models.filter(model => model.id && !model.disabled).map(model => {
+    // 账号目录的新字段已返回，锁定 SDK 的类型声明尚未包含它。
+    const reasoning = model.reasoning as (RawLanguageModel['reasoning'] & { canDisableThinking?: boolean }) | undefined
+    return {
+    id: model.id, name: model.name ?? model.id,
+    contextWindow: model.contextWindow?.defaultLength ?? model.maxInputTokens,
+    maxTokens: model.maxOutputTokens,
+    efforts: [...new Set([...(!model.onlyReasoning || reasoning?.canDisableThinking ? ['off'] : []), ...(model.reasoning?.supportedEfforts
+      ?? (model.reasoning?.effort ? [model.reasoning.effort] : []))])],
+    defaultEffort: model.reasoning?.defaultEffort ?? model.reasoning?.effort,
+    }
+  })
 }

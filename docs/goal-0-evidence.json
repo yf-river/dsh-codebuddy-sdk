@@ -1,0 +1,42 @@
+{
+  "date": "2026-10-26",
+  "status": "BLOCKED",
+  "reason": "No supported public SDK input for importing and replacing arbitrary DSH role history was found in the checked contract and official documentation.",
+  "node": "v26.0.0",
+  "sdk": "0.3.287",
+  "cli": "2.172.1",
+  "dsh": "0.2.1-rc.3",
+  "realModelRequests": 0,
+  "requestsSha256": "df285381a2e00dc8d486943f736d0e07f0f00a524fee940b0307704a1bec2787",
+  "native": {
+    "path": "/v1/messages",
+    "roles": [
+      "user",
+      "assistant",
+      "user"
+    ],
+    "maxTokens": 256,
+    "systemPresent": true,
+    "historyPresent": true
+  },
+  "originalPlugin": {
+    "roles": [
+      "system",
+      "user"
+    ],
+    "maxTokens": 128000,
+    "systemPresent": false,
+    "historyPresent": false,
+    "codebuddyDefaultSystemPresent": true
+  },
+  "minimalSdk": {
+    "roles": [
+      "system",
+      "user"
+    ],
+    "maxTokens": 128000,
+    "systemOverrideExact": true,
+    "userQueryWrapperPresent": true,
+    "historyPresent": false
+  }
+}

@@ -1,0 +1,127 @@
+{
+  "date": "2026-10-26",
+  "delivery": "local uncommitted implementation; no everyday profile installation, commit, push or release",
+  "runtime": {
+    "node": "24.11.1",
+    "dsh": "0.2.1-rc.3",
+    "agentSDK": "0.3.287",
+    "codebuddyCode": "2.172.1"
+  },
+  "unitTests": {
+    "passed": 20,
+    "total": 20
+  },
+  "integration": {
+    "passed": 14,
+    "total": 14,
+    "realModelRequests": 0,
+    "network": "isolated namespace, loopback only",
+    "runs": "12-check full suite plus 2 focused transport checks"
+  },
+  "realAcceptance": {
+    "checks": [
+      {
+        "name": "actual DSH tool execution with CodeBuddy account",
+        "status": "PASS"
+      },
+      {
+        "name": "actual CodeBuddy account conversation survives DSH process restart",
+        "status": "PASS"
+      }
+    ],
+    "compaction": {
+      "status": "PARTIAL",
+      "firstAttempt": "256-token cap truncated the checkpoint",
+      "retry": "Complete summary produced; DSH rejected it because framed summary was 482 estimated tokens versus 455 source tokens",
+      "applied": false,
+      "liveContinuationAfterAppliedCompaction": false,
+      "offlineLongHistoryAcceptance": "PASS"
+    },
+    "attempts": 5,
+    "limit": 5,
+    "actualModelResponses": [
+      {
+        "artifact": "tool-turn-events.json",
+        "contentTypes": [
+          "tool-call"
+        ],
+        "usage": {
+          "inputTokens": 5990,
+          "outputTokens": 62,
+          "cacheReadTokens": 0,
+          "cacheWriteTokens": 0,
+          "totalTokens": 6052
+        },
+        "model": {
+          "kind": "codebuddy-server",
+          "version": 2,
+          "requestedModel": "deepseek-v4.1-flash",
+          "reportedModel": "deepseek-v4.1-flash-ioa"
+        }
+      },
+      {
+        "artifact": "tool-turn-events.json",
+        "contentTypes": [
+          "text"
+        ],
+        "usage": {
+          "inputTokens": 6658,
+          "outputTokens": 2,
+          "cacheReadTokens": 0,
+          "cacheWriteTokens": 0,
+          "totalTokens": 6660
+        },
+        "model": {
+          "kind": "codebuddy-server",
+          "version": 2,
+          "requestedModel": "deepseek-v4.1-flash",
+          "reportedModel": "deepseek-v4.1-flash-ioa"
+        }
+      },
+      {
+        "artifact": "restart-turn-events.json",
+        "contentTypes": [
+          "text"
+        ],
+        "usage": {
+          "inputTokens": 6685,
+          "outputTokens": 2,
+          "cacheReadTokens": 0,
+          "cacheWriteTokens": 0,
+          "totalTokens": 6687
+        },
+        "model": {
+          "kind": "codebuddy-server",
+          "version": 2,
+          "requestedModel": "deepseek-v4.1-flash",
+          "reportedModel": "deepseek-v4.1-flash-ioa"
+        }
+      }
+    ],
+    "currencyCharge": "not measured"
+  },
+  "remaining": [
+    "Live model continuation after an adopted compaction remains unverified: actual test conversation was too short to shrink; complete long-history DSH flow passed with the local model fixture.",
+    "No native DeepSeek coding-quality comparison.",
+    "SDK message wrappers, native tool update projection, schema/default differences and per-request startup overhead remain."
+  ],
+  "evidence": {
+    "offline": "artifacts/sdk-integration/report.json",
+    "live": "artifacts/server-live/report.json",
+    "budget": "artifacts/server-live/budget.json",
+    "initialCapFailure": "artifacts/server-live/initial-report.json",
+    "summaryRejection": "artifacts/server-live/compaction-events.json"
+  },
+  "sourceHashes": {
+    "src/history.ts": "e9f953849043f0dd2b4598cf77b5764a3dfdfb47c902739772b32f513f2ad2a6",
+    "src/index.ts": "7f83f64dffb507a88733b7a384dbe67e4f51d36fea76d57aea30cee00476a823",
+    "src/models.ts": "eb185bc1272a041f403e4db7f121ea54cd42e0529e73f1ad58309ef2404c9310",
+    "src/request-policy.ts": "acb0c6510c89720bfee91f0ea312f598296aff84c78934eb77d825501054be15",
+    "src/runtime.ts": "548f726613418dbc9fa5060db52833674ba746768aa48011a9c856bb38c760f1",
+    "src/stream.ts": "1e54ed34c79721144f5215a9584b726a8e33f5bfe3bcf0a5c47ddc9997b5a95b",
+    "src/tool-bridge.ts": "38ed1cea193f9992eb057b0454d035edcbcfd47c68081e8749678ed0a236e43b",
+    "src/worker.ts": "cecb2d3aefd0f9d52aeb1a8d80507024c5e3ee270533f5fd794060509bb83e41"
+  },
+  "snapshot": "Previous Server migration acceptance; source hashes refer to that snapshot.",
+  "currentAcceptance": "daily-evidence.json"
+}
