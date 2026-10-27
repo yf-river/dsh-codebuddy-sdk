@@ -29,6 +29,11 @@ export const Config: z<Config> = z.object({
 export const name = 'codebuddy'
 export const inject = ['llm']
 
+/** 选择器里用 `codebuddy-` 前缀区分 CodeBuddy 额度与官方 DeepSeek 路由；模型 id 不变。 */
+function displayName(name: string): string {
+  return name.startsWith('deepseek-') ? `codebuddy-${name.slice('deepseek-'.length)}` : name
+}
+
 class CodeBuddyAdapter extends LlmAdapter {
   private models: CodeBuddyModel[] = []
   private discovery?: Promise<void>
@@ -72,7 +77,7 @@ class CodeBuddyAdapter extends LlmAdapter {
 
   override async listModels(provider: string): Promise<readonly LlmModelInfo[]> {
     await this.refreshModels()
-    return this.models.map(model => ({ provider, id: model.id, name: model.name, inputModalities: ['text'] }))
+    return this.models.map(model => ({ provider, id: model.id, name: displayName(model.name), inputModalities: ['text'] }))
   }
 
   override async resolveModel(provider: string, model: string): Promise<LlmResolvedModelInfo> {
