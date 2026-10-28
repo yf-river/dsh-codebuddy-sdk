@@ -14,17 +14,63 @@ export interface ModelEvent {
 }
 interface Block { type: 'text' | 'reasoning' | 'tool-call'; text: string; id?: string; name?: string; index: number }
 
+function isTokenCount(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0
+}
+
+/** The gateway zero-fills fields it does not recognize, so `??` would stop at 0; take the first positive count instead. */
+function firstPositiveTokenCount(...values: unknown[]): number | undefined {
+  for (const value of values) if (isTokenCount(value) && value > 0) return value
+  return undefined
+}
+
+/** `inputTokensDetails` may be an object or an array of per-attempt details. */
+function detailTokenCount(details: unknown, key: 'cached_tokens' | 'cache_write_tokens'): number | undefined {
+  const items = Array.isArray(details) ? details : [details]
+  let found = false
+  let total = 0
+  for (const item of items) {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) continue
+    const value = (item as Record<string, unknown>)[key]
+    if (!isTokenCount(value)) continue
+    found = true
+    total += value
+  }
+  return found ? total : undefined
+}
+
 function usageOf(raw: Record<string, unknown> | undefined): TokenUsage | undefined {
   if (!raw) return undefined
   const input = raw.prompt_tokens ?? raw.inputTokens
   const output = raw.completion_tokens ?? raw.outputTokens
-  if (typeof input !== 'number' || typeof output !== 'number') return undefined
-  const details = (raw.prompt_tokens_details ?? raw.inputTokensDetails) as Record<string, unknown> | undefined
-  const read = raw.cache_read_input_tokens ?? details?.cached_tokens
-  const write = raw.cache_creation_input_tokens ?? details?.cache_write_tokens
-  const counters: TokenUsage = { inputTokens: input - (typeof read === 'number' ? read : 0) - (typeof write === 'number' ? write : 0), outputTokens: output }
-  if (typeof read === 'number') counters.cacheReadTokens = read
-  if (typeof write === 'number') counters.cacheWriteTokens = write
+  if (!isTokenCount(input) || !isTokenCount(output)) return undefined
+  const promptDetails = raw.prompt_tokens_details
+  const promptDetail = promptDetails && typeof promptDetails === 'object' && !Array.isArray(promptDetails)
+    ? promptDetails as Record<string, unknown>
+    : undefined
+  // CodeBuddy's gateway zero-fills Anthropic cache names and puts the real hit in the OpenAI fields.
+  // `prompt_cache_miss_tokens` is the uncached input, not an extra cache-write bucket; using it would
+  // subtract the same tokens twice and report "input 0 / cache write N".
+  const readFields: unknown[] = [
+    raw.cache_read_input_tokens,
+    raw.cacheReadInputTokens,
+    detailTokenCount(raw.inputTokensDetails, 'cached_tokens'),
+    promptDetail?.cached_tokens,
+    raw.prompt_cache_hit_tokens,
+  ]
+  const writeFields: unknown[] = [
+    raw.cache_creation_input_tokens,
+    raw.cacheCreationInputTokens,
+    raw.prompt_cache_write_tokens,
+    detailTokenCount(raw.inputTokensDetails, 'cache_write_tokens'),
+    promptDetail?.cache_write_tokens,
+  ]
+  const read = firstPositiveTokenCount(...readFields)
+  const write = firstPositiveTokenCount(...writeFields)
+  const counters: TokenUsage = { inputTokens: input - (read ?? 0) - (write ?? 0), outputTokens: output }
+  // A reported zero is still a real zero; only omit the bucket when no cache field exists at all.
+  if (readFields.some(isTokenCount)) counters.cacheReadTokens = read ?? 0
+  if (writeFields.some(isTokenCount)) counters.cacheWriteTokens = write ?? 0
   if (Object.values(counters).some(value => !Number.isFinite(value) || value < 0)) return undefined
   counters.totalTokens = input + output
   return counters

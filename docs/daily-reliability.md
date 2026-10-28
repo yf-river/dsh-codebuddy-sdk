@@ -22,6 +22,8 @@
 
 真实调用使用 `deepseek-v4.1-flash`、reasoning `off`；服务报告模型为 `deepseek-v4.1-flash-ioa`。六次普通生成和两次摘要均取得 token 数据，合计输入 69,038、输出 1,778、总计 70,816 token（DSH/provider 返回口径）；人民币扣费未核账。记录中的缓存读写为 0，不能据此判断服务端实际缓存或计费策略。
 
+2026-10-28 复核并修复了缓存字段读取：网关在第二轮真实调用返回 `prompt_tokens_details.cached_tokens=3840`、`prompt_cache_hit_tokens=3840`、`prompt_cache_miss_tokens=229`，同时把 `cache_read_input_tokens` 零填为 0；旧实现用 `??` 短路，导致缓存读取恒 0。修复后同一 fixture 得到 `cacheReadTokens=3840`、`inputTokens=229`、`totalTokens=4071`；headless 真实第二轮得到 `cacheReadTokens=18688`、`inputTokens=145`。上面的历史 0 值保留为修复前证据。
+
 手动压缩将可见历史估算从 7,004 降至 1,154 token，替换约 6,348 token 的旧消息；自动压缩另替换约 2,277 token 的历史片段。两份摘要均保留验收码和归档口令，后续实际请求已移除被压缩消息的 ID，重启后仍能回答并读取新文件。
 
 首次真实运行在第 4 次后因测试脚本误判停止：模型摘要引用了原文测试标记，脚本据此误判原文残留。原始消息节点实际上已被新摘要替换。校验已修正为消息 ID 比较，补充独立回归检查，并保留 `artifacts/daily-live/initial-report.json`。随后沿用原会话和原预算完成剩余 4 次；未重跑前四次，未追加额度。

@@ -56,6 +56,8 @@ dsh plugin --profile web add /data/ida/ai/dsh-codebuddy-sdk
 
 回复元数据包含请求模型、实际报告模型、结束原因和本次耗时。报告每次生成的未缓存输入、缓存读取、缓存写入、输出和总 token；缺失值不填成零。SDK 累计用量不重复计入，token 数不等于人民币扣费。
 
+CodeBuddy 网关会把 Anthropic 命名的缓存字段零填，真实命中值在 `prompt_tokens_details.cached_tokens` / `prompt_cache_hit_tokens`；插件按第一个正数读取 `cache_read_input_tokens`、`cacheReadInputTokens`、`inputTokensDetails.cached_tokens`、`prompt_tokens_details.cached_tokens`、`prompt_cache_hit_tokens`。`prompt_cache_miss_tokens` 是未命中输入，不作为缓存写入重复扣减。
+
 仍有以下边界：
 
 - 仅支持文本输入及文本工具结果；图片、文件未被 DSH 投影成文本时会明确拒绝。

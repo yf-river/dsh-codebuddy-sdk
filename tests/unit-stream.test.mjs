@@ -20,6 +20,39 @@ test('缓存输入采用互斥口径，缺失计数不伪装成零',async()=>{
  const unknown=await collect([raw({content:'ok'}),done([text('ok')],{inputTokens:0,outputTokens:0})])
  assert.equal(unknown.chunks.some(x=>x.type==='usage'),false)
 })
+test('网关零填 Anthropic 缓存字段时读取真实命中',async()=>{
+ const usage={prompt_tokens:4069,completion_tokens:2,total_tokens:4071,prompt_tokens_details:{cached_tokens:3840},prompt_cache_hit_tokens:3840,prompt_cache_miss_tokens:229,cache_read_input_tokens:0,cache_creation_input_tokens:0,prompt_cache_write_tokens:0}
+ const {assembled}=await collect([raw({content:'ok'},'stop',usage),done([text('ok')])])
+ assert.deepEqual(assembled.usage,{inputTokens:229,outputTokens:2,cacheReadTokens:3840,cacheWriteTokens:0,totalTokens:4071})
+})
+test('response_done 归一化 usage 同样读取缓存明细',async()=>{
+ const {assembled}=await collect([raw({content:'ok'}),done([text('ok')],{inputTokens:4069,outputTokens:2,totalTokens:4071,inputTokensDetails:{cached_tokens:3840}})])
+ assert.deepEqual(assembled.usage,{inputTokens:229,outputTokens:2,cacheReadTokens:3840,totalTokens:4071})
+})
+test('显式 cache creation 计入缓存写入并互斥扣减',async()=>{
+ const {assembled}=await collect([raw({content:'ok'},'stop',{prompt_tokens:100,completion_tokens:1,cache_read_input_tokens:30,cache_creation_input_tokens:20}),done([text('ok')])])
+ assert.deepEqual(assembled.usage,{inputTokens:50,outputTokens:1,cacheReadTokens:30,cacheWriteTokens:20,totalTokens:101})
+})
+test('prompt_cache_miss_tokens 是未命中输入，不作为缓存写入',async()=>{
+ const {assembled}=await collect([raw({content:'ok'},'stop',{prompt_tokens:100,completion_tokens:1,prompt_cache_hit_tokens:60,prompt_cache_miss_tokens:40}),done([text('ok')])])
+ assert.deepEqual(assembled.usage,{inputTokens:40,outputTokens:1,cacheReadTokens:60,totalTokens:101})
+})
+test('没有缓存字段时不伪装成零',async()=>{
+ const {assembled}=await collect([raw({content:'ok'},'stop',{prompt_tokens:100,completion_tokens:1}),done([text('ok')])])
+ assert.deepEqual(assembled.usage,{inputTokens:100,outputTokens:1,totalTokens:101})
+})
+test('字段存在但为零时保留真实零值',async()=>{
+ const {assembled}=await collect([raw({content:'ok'},'stop',{prompt_tokens:100,completion_tokens:1,cache_read_input_tokens:0,prompt_cache_hit_tokens:0}),done([text('ok')])])
+ assert.deepEqual(assembled.usage,{inputTokens:100,outputTokens:1,cacheReadTokens:0,totalTokens:101})
+})
+test('inputTokensDetails 数组按项累加缓存命中',async()=>{
+ const {assembled}=await collect([raw({content:'ok'},'stop',{prompt_tokens:100,completion_tokens:1,inputTokensDetails:[{cached_tokens:10},{cached_tokens:5}]}),done([text('ok')])])
+ assert.deepEqual(assembled.usage,{inputTokens:85,outputTokens:1,cacheReadTokens:15,totalTokens:101})
+})
+test('缓存计数超过输入时省略用量',async()=>{
+ const {chunks}=await collect([raw({content:'ok'},'stop',{prompt_tokens:10,completion_tokens:1,cache_read_input_tokens:11}),done([text('ok')])])
+ assert.equal(chunks.some(x=>x.type==='usage'),false)
+})
 test('长度截断保留真实结束原因',async()=>{
  const {chunks}=await collect([raw({content:'partial'},'length'),done([text('partial')])]);assert.equal(chunks.at(-1).reason.kind,'max-tokens')
 })

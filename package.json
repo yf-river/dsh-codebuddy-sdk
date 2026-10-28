@@ -1,6 +1,6 @@
 {
   "name": "dsh-codebuddy-sdk",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "description": "DeepSeek Harness provider using the official CodeBuddy Server with DSH-owned history and tools.",
   "type": "module",
   "main": "dist/index.js",
