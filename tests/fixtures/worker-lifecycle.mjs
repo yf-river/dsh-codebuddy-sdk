@@ -11,6 +11,10 @@ process.on('message',packet=>{
  const send=message=>process.send({type:'message',message})
  send({type:'model',event:{model:packet.request.model,choices:[{delta:{content:'complete answer'},finish_reason:'stop'}]}})
  send({type:'response_done',response:{output:[{type:'message',content:[{type:'output_text',text:'complete answer'}]}]}})
+ if(scenario==='search'){
+  setTimeout(()=>{send({type:'web_search_result',searchResult:{type:'web_search_tool_result',results:[]}});process.send({type:'complete'},()=>{process.disconnect();setImmediate(()=>process.exit(0))})},5500)
+  return
+ }
  if(scenario!=='no-complete')process.send({type:'complete'})
  if(scenario==='normal'||scenario==='orphan-pipe')process.disconnect(),setImmediate(()=>process.exit(0))
  else if(scenario==='bad-exit')setImmediate(()=>process.exit(2))

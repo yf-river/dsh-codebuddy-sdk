@@ -9,6 +9,9 @@ import { CodeBuddyToolBridge } from './tool-bridge.js'
 import { requestHistory, unsupported } from './history.js'
 import { llmError } from './errors.js'
 import { runWorker } from './runtime.js'
+import { readImages } from './images.js'
+import { CodeBuddySearchProvider } from './web.js'
+import type { AttachmentStore } from '@deepseek-ai/dsh-attachment'
 
 export interface Config {
   provider?: string
@@ -17,6 +20,7 @@ export interface Config {
   cwd?: string
   contextWindow?: number
   maxTokens?: number
+  searchModel?: string
 }
 export const Config: z<Config> = z.object({
   provider: z.string().description('Provider route (default codebuddy)'),
@@ -25,6 +29,7 @@ export const Config: z<Config> = z.object({
   cwd: z.string().description('Working directory for the CLI'),
   contextWindow: z.number().description('Context window override'),
   maxTokens: z.number().description('Maximum output tokens sent to the CLI'),
+  searchModel: z.string().description('Model for auxiliary native web search (default hy4-preview-ioa)'),
 })
 export const name = 'codebuddy'
 export const inject = ['llm']
@@ -41,7 +46,7 @@ class CodeBuddyAdapter extends LlmAdapter {
   private readonly active = new Set<ReturnType<typeof runWorker>>()
   private disposed = false
 
-  constructor(private readonly config: Config) {
+  constructor(private readonly config: Config, private readonly attachments: () => AttachmentStore | undefined) {
     super()
     if (config.pathToCodebuddyCode) unsupported('pathToCodebuddyCode 不适用于 Server 接口；请移除此配置，使用锁定的官方运行时')
   }
@@ -77,7 +82,7 @@ class CodeBuddyAdapter extends LlmAdapter {
 
   override async listModels(provider: string): Promise<readonly LlmModelInfo[]> {
     await this.refreshModels()
-    return this.models.map(model => ({ provider, id: model.id, name: displayName(model.name), inputModalities: ['text'] }))
+    return this.models.map(model => ({ provider, id: model.id, name: displayName(model.name), inputModalities: model.supportsImages ? ['text', 'image'] : ['text'] }))
   }
 
   override async resolveModel(provider: string, model: string): Promise<LlmResolvedModelInfo> {
@@ -86,7 +91,7 @@ class CodeBuddyAdapter extends LlmAdapter {
     if (!found) unsupported(`CodeBuddy 模型目录中没有精确模型 id：${model}`)
     const contextWindow = this.config.contextWindow ?? found.contextWindow
     return {
-      provider, id: found.id, name: found.name, inputModalities: ['text'],
+      provider, id: found.id, name: found.name, inputModalities: found.supportsImages ? ['text', 'image'] : ['text'],
       ...(contextWindow === undefined ? {} : { context: { contextWindow } }),
       defaultMaxTokens: this.config.maxTokens ?? found.maxTokens,
       ...(found.efforts?.length ? { reasoning: {
@@ -106,7 +111,13 @@ class CodeBuddyAdapter extends LlmAdapter {
     if (maxTokens !== undefined && (!Number.isSafeInteger(maxTokens) || maxTokens <= 0)) unsupported('maxTokens 必须是正整数')
     const effort = options.reasoningEffort
     if (effort !== undefined && !['off', 'low', 'medium', 'high', 'xhigh', 'max', 'minimal'].includes(effort)) unsupported(`不支持 reasoningEffort=${effort}`)
-    const history = requestHistory(options)
+    const hasImages = options.messages.some(message => message.content.some(block => block.type === 'image' && !block.offloaded))
+    if (hasImages) {
+      await this.refreshModels()
+      if (!this.models.find(candidate => candidate.id === model)?.supportsImages) unsupported(`CodeBuddy 模型 ${model} 未声明图片能力`)
+    }
+    const images = await readImages(options, this.attachments(), this.models.find(candidate => candidate.id === model)?.maxImageCount)
+    const history = requestHistory(options, images)
     const bridge = new CodeBuddyToolBridge(options.tools ?? [])
     const worker = runWorker({ ...history, model, cwd: this.config.cwd ?? process.cwd(), tools: options.tools ?? [], maxTokens, effort }, options.signal)
     this.active.add(worker)
@@ -144,7 +155,16 @@ class CodeBuddyAdapter extends LlmAdapter {
 }
 
 export function apply(ctx: Context, config: Config): void {
-  const adapter = new CodeBuddyAdapter(config)
+  const adapter = new CodeBuddyAdapter(config, () => ctx.get('attachments'))
   ctx.llm.registerAdapter([config.provider ?? name], adapter)
   ctx.effect(() => () => adapter.dispose())
+  ctx.inject(['web'], webCtx => {
+    const provider = new CodeBuddySearchProvider(config, event => {
+      const agents = webCtx.get('agents') as { currentInitiator(): { session: { id: string } } | undefined } | undefined
+      webCtx.logger.info('codebuddy/search-usage %s', JSON.stringify({ sessionId: agents?.currentInitiator()?.session.id,
+        model: event.model, usage: event.usage, sourceCount: event.sourceCount, failed: event.failed }))
+    })
+    webCtx.effect(() => webCtx.web.registerSearchProvider(provider))
+    webCtx.effect(() => () => provider.dispose())
+  })
 }

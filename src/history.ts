@@ -1,5 +1,6 @@
 import { LlmError } from '@deepseek-ai/dsh-llm'
 import type { GenerateOptions } from '@deepseek-ai/dsh-llm'
+import { offloadedImageText } from '@deepseek-ai/dsh-llm'
 
 export function unsupported(message: string): never { throw new LlmError(message, 'CODEBUDDY_UNSUPPORTED') }
 export function stableJson(value: unknown): string {
@@ -8,7 +9,14 @@ export function stableJson(value: unknown): string {
 }
 
 // 每次按 DSH 当前投影重新构造原生消息，旧 SDK 会话元数据不参与恢复。
-export function requestHistory(options: GenerateOptions): { system: string; input: unknown[] } {
+export function requestHistory(options: GenerateOptions, images: ReadonlyMap<string, string> = new Map()): { system: string; input: unknown[] } {
+  const imageContent = (block: Extract<GenerateOptions['messages'][number]['content'][number], { type: 'image' }>) => {
+    if (!block.attachment) unsupported('图片缺少附件引用')
+    if (block.offloaded) return { type: 'input_text', text: offloadedImageText(block.attachment) }
+    const image = images.get(block.attachment.attachmentId)
+    if (!image) unsupported('图片附件尚未读取')
+    return { type: 'input_image', image }
+  }
   let offset = 0
   const system: string[] = []
   while (options.messages[offset]?.role === 'system') {
@@ -26,10 +34,12 @@ export function requestHistory(options: GenerateOptions): { system: string; inpu
       const callId = (message.source as { callId?: string })?.callId
       const name = callId && pending.get(callId)
       if (!callId || !name) unsupported('工具结果缺少、重复或无法匹配调用 ID')
-      const output = message.content.map(block => {
-        if (block.type !== 'text') unsupported('工具结果只支持文本')
-        return block.text
-      }).join('\n')
+      const parts = message.content.map(block => {
+        if (block.type === 'image') return imageContent(block)
+        if (block.type !== 'text') unsupported('工具结果只支持文本和图片')
+        return { type: 'input_text', text: block.text }
+      })
+      const output = parts.some(part => part.type === 'input_image') ? parts : parts.map(part => (part as { text: string }).text).join('\n')
       input.push({ type: 'function_call_result', callId, name: `mcp__custom_tools__${name}`, output, status: 'completed',
         ...(message.isError ? { providerData: { isError: true } } : {}) })
       pending.delete(callId)
@@ -51,6 +61,7 @@ export function requestHistory(options: GenerateOptions): { system: string; inpu
     for (const block of message.content) {
       if (block.type === 'text') content.push({ type: message.role === 'assistant' ? 'output_text' : 'input_text', text: block.text,
         ...(message.role === 'assistant' ? { annotations: [] } : {}) })
+      else if (block.type === 'image' && message.role === 'user') content.push(imageContent(block))
       else if (block.type === 'reasoning' && message.role === 'assistant') {
         // 推理进入原生 assistant 字段，不作为普通对话文本发送。
       } else if (block.type === 'tool-call' && message.role === 'assistant') {

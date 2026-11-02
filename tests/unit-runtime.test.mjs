@@ -13,9 +13,17 @@ async function fixture(scenario,run){
  const cwd=mkdtempSync(resolve(tmpdir(),'dsh-worker-lifecycle-'))
  childProcess.fork=(_file,_args,options)=>realFork(resolve('tests/fixtures/worker-lifecycle.mjs'),[scenario],options)
  syncBuiltinESMExports()
- const controller=new AbortController(),worker=runWorker({model:'deepseek-v4.1-flash',cwd,system:'fixture',input:[],tools:[]},controller.signal)
+ const controller=new AbortController(),worker=runWorker({model:'deepseek-v4.1-flash',cwd,system:'fixture',input:[],tools:[],...(scenario==='search'?{search:{query:'q'}}:{})},controller.signal)
  try{await run({worker,controller,cwd})}finally{worker.stop();await worker.done;childProcess.fork=realFork;syncBuiltinESMExports()}
 }
+test('搜索等待工具执行完毕，模型结束不会提前触发五秒清理',async()=>{
+ await fixture('search',async({worker})=>{
+  let result
+  for await(const event of worker.messages())if(event.type==='web_search_result')result=event.searchResult
+  assert.deepEqual(result,{type:'web_search_tool_result',results:[]})
+  assert.equal((await worker.verify()).kind,'normal')
+ })
+})
 test('正常收尾不等待五秒，清理异常不丢弃已完成回答',async()=>{
  for(const scenario of ['normal','cleanup-error'])await fixture(scenario,async({worker})=>{const start=performance.now();const cleanup=await worker.verify();assert.equal(cleanup.kind,'normal');assert.ok(performance.now()-start<3000);if(scenario==='cleanup-error')assert.equal(cleanup.reason,'cleanup-error')})
 })

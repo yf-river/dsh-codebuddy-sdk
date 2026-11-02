@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const soak = !!process.env.CODEBUDDY_SOAK_DURATION_MS
-const output = resolve(root, soak ? (process.env.CODEBUDDY_SOAK_OUTPUT ?? 'artifacts/sdk-soak') : 'artifacts/sdk-integration')
+const output = resolve(root, soak ? (process.env.CODEBUDDY_SOAK_OUTPUT ?? 'artifacts/sdk-soak') : (process.env.CODEBUDDY_TEST_OUTPUT ?? 'artifacts/sdk-integration'))
 mkdirSync(output, { recursive: true })
 if (!process.argv.includes('--isolated')) {
   const archive = resolve(root, 'artifacts/sdk-integration-runs', new Date().toISOString().replaceAll(':','-'))
@@ -23,7 +23,7 @@ if (!process.argv.includes('--isolated')) {
     env: { PATH: `${dirname(process.execPath)}:/usr/local/bin:/usr/bin:/bin:/sbin:/usr/sbin`, HOME: home,
       XDG_CONFIG_HOME: `${home}/config`, CODEBUDDY_CONFIG_DIR: `${home}/codebuddy`,
       CODEBUDDY_API_KEY: 'local-fixture-key', DISABLE_AUTOUPDATER: '1', NO_PROXY: '127.0.0.1,localhost',
-      HOST_NET: readlinkSync('/proc/self/ns/net'), CODEBUDDY_TEST_FILTER: process.env.CODEBUDDY_TEST_FILTER, CODEBUDDY_SOAK_DURATION_MS: process.env.CODEBUDDY_SOAK_DURATION_MS, CODEBUDDY_SOAK_TICK_MS: process.env.CODEBUDDY_SOAK_TICK_MS, CODEBUDDY_SOAK_MINIMUM: process.env.CODEBUDDY_SOAK_MINIMUM, CODEBUDDY_SOAK_MAXIMUM: process.env.CODEBUDDY_SOAK_MAXIMUM, CODEBUDDY_SOAK_OUTPUT: process.env.CODEBUDDY_SOAK_OUTPUT, CODEBUDDY_SOAK_RESTART_MS: process.env.CODEBUDDY_SOAK_RESTART_MS },
+      HOST_NET: readlinkSync('/proc/self/ns/net'), CODEBUDDY_TEST_OUTPUT: process.env.CODEBUDDY_TEST_OUTPUT, CODEBUDDY_TEST_FILTER: process.env.CODEBUDDY_TEST_FILTER, CODEBUDDY_SOAK_DURATION_MS: process.env.CODEBUDDY_SOAK_DURATION_MS, CODEBUDDY_SOAK_TICK_MS: process.env.CODEBUDDY_SOAK_TICK_MS, CODEBUDDY_SOAK_MINIMUM: process.env.CODEBUDDY_SOAK_MINIMUM, CODEBUDDY_SOAK_MAXIMUM: process.env.CODEBUDDY_SOAK_MAXIMUM, CODEBUDDY_SOAK_OUTPUT: process.env.CODEBUDDY_SOAK_OUTPUT, CODEBUDDY_SOAK_RESTART_MS: process.env.CODEBUDDY_SOAK_RESTART_MS },
   })
   writeFileSync(resolve(output, 'run.log'), `${result.stdout ?? ''}\n${result.stderr ?? ''}`)
   process.stdout.write(result.stdout ?? '')
@@ -144,6 +144,20 @@ try {
   const{runSoak}=await import('./soak.mjs')
   await runSoak({root,output,cwd,stream,system,text,requests,setMode:value=>{mode=value},getModelRequests:()=>modelRequests,setActiveAbort:value=>{abortActiveRequest=value}})
  }else{
+  await check('native search advertises WebSearch and rejects plain model text', async () => {
+    mode = 'native-search'
+    const { CodeBuddySearchProvider } = await import('../dist/web.js')
+    const events = []
+    const provider = new CodeBuddySearchProvider({ cwd }, event => events.push(event))
+    const before = modelRequests
+    try {
+      await assert.rejects(provider.search({ query: 'host-owned-query' }, AbortSignal.timeout(25000)), /未返回原生搜索工具结果/)
+      assert.equal(modelRequests - before, 1)
+      assert.deepEqual(requests.findLast(request => Array.isArray(request.body?.messages)).body.tools.map(tool => tool.function.name), ['WebSearch'])
+      assert.equal(events[0].usage.totalTokens, 47)
+      assert.equal(events[0].failed, true)
+    } finally { await provider.dispose() }
+  })
   await check('SDK SSE preserves thinking, text and final usage frames', async () => {
     const { unstable_v2_createSession } = await import('@tencent-ai/agent-sdk')
     const session = unstable_v2_createSession({ model: options.model, executable: process.execPath, cwd,

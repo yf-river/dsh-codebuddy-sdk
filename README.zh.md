@@ -37,12 +37,27 @@ dsh plugin --profile web add /data/ida/ai/dsh-codebuddy-sdk
 - 每次提交 DSH 当前完整历史，用户、助手和工具结果各自保留角色与调用 ID。
 - DSH 压缩、裁剪或编辑历史后，下一次使用修改后的历史；恢复已保存的 DSH 会话不需要旧 SDK 会话文件。
 - 摘要生成是独立模型请求，沿用 DSH 的提示词和所选 CodeBuddy 路由。
-- 工具 Schema 通过公开 MCP 接口传递，工具仅由 DSH 执行。并行同名同参数调用以各自 ID 关联结果。
-- 官方运行时在独立子进程运行；SDK 自行执行工具会被拒绝，追加模型请求在公开 HTTP 宿主策略处被阻止。
+- 会话工具 Schema 通过公开 MCP 接口传递，会话工具仅由 DSH 执行。并行同名同参数调用以各自 ID 关联结果。
+- 普通对话的官方运行时在独立子进程运行；SDK 自行执行会话工具会被拒绝，追加模型请求在公开 HTTP 宿主策略处被阻止。网页搜索使用独立 worker 执行原生搜索工具。
 - 账号认证通过官方 SDK 公开认证接口沿用登录态，凭据仅在 worker 内存中传递，不保存到插件文件。
 - DSH 系统提示词覆盖默认提示词，关闭可控的 CodeBuddy 规则、自动记忆和后台任务；SDK 额外压缩恢复的模型请求由宿主策略阻止。
 
-历史转换接受 DSH 正常提供的文本消息；缺失工具结果、重复调用 ID 等无效关系会在模型请求前报错。DSH 自己的会话编辑、恢复和压缩入口仍受 DSH 的规则约束。
+历史转换接受文本消息、用户图片和工具截图；图片通过 DSH 附件服务读取，模型图片能力来自 CodeBuddy 账号目录。已卸载图片使用 DSH 的文字占位。缺失工具结果、重复调用 ID 等无效关系会在模型请求前报错。DSH 自己的会话编辑、恢复和压缩入口仍受 DSH 的规则约束。
+
+## 网页搜索和抓取
+
+加载 DSH web 服务后，插件注册 `codebuddy` 搜索后端，通过官方 SDK 的原生 `WebSearch` 工具复用 CodeBuddy 登录态，不需要 DeepSeek API key。搜索只接受实际工具返回的结构化来源，不从模型答案提取链接。
+
+```yaml
+- id: web
+  config:
+    searchProvider: codebuddy
+    fetchProvider: http
+```
+
+`http` 抓取使用 DSH 内置的匿名公共网页后端。CodeBuddy 搜索默认使用 `hy4-preview-ioa`，可通过插件的 `searchModel` 指定精确模型。每次搜索包含一次独立模型调用和一次原生搜索，受所选模型的额度、可用性与搜索服务约束；不会切换当前聊天模型。辅助用量写入 `codebuddy/search-usage` 结构化运行日志，包含发起会话 ID（若有），不混入聊天模型单步用量。搜索支持取消，90 秒超时；未得到工具结果时明确失败。
+
+DeepSeek 的 `deepseek-search-api`、`deepseek-fetch-api` 和 `deepseek-official` 是独立后端，不会自动使用 CodeBuddy 登录态。
 
 ## 错误处理
 
@@ -60,7 +75,7 @@ CodeBuddy 网关会把 Anthropic 命名的缓存字段零填，真实命中值�
 
 仍有以下边界：
 
-- 仅支持文本输入及文本工具结果；图片、文件未被 DSH 投影成文本时会明确拒绝。
+- 图片需要 DSH 附件服务及支持视觉的模型；文件由 DSH 投影成文本，其他未支持内容会明确拒绝。
 - 显式 `temperature`、`stop` 尚未验证可靠透传，会报错。
 - CodeBuddy 的 `<user_query>` 包装、相邻用户消息合并、工具名称前缀及部分参数默认值仍存在。
 - CLI 可能改变工具 Schema 的顶层 `additionalProperties`；嵌套约束和 DSH 的执行验证仍需保留。

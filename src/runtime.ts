@@ -6,7 +6,7 @@ import { llmError, type Failure } from './errors.js'
 import type { ModelEvent } from './stream.js'
 import type { ToolSchema } from '@deepseek-ai/dsh-llm'
 
-export interface WorkerRequest { model: string; cwd: string; system: string; input: unknown[]; tools: readonly ToolSchema[]; maxTokens?: number; effort?: string }
+export interface WorkerRequest { model: string; cwd: string; system: string; input: unknown[]; tools: readonly ToolSchema[]; maxTokens?: number; effort?: string; search?: { query: string } }
 export type WorkerReply = { type: 'message'; message: ModelEvent } | { type: 'complete' } | { type: 'failure'; failure: Failure }
 export interface WorkerCleanup { kind: 'normal' | 'forced'; durationMs: number; reason?: string }
 
@@ -99,7 +99,7 @@ export function runWorker(request: WorkerRequest, signal?: AbortSignal) {
     if (settled) return
     if (reply.type === 'message') {
       queue.push(reply.message)
-      if (reply.message.type === 'response_done' && !complete) arm()
+      if (reply.message.type === 'response_done' && !complete && !request.search) arm()
     } else if (reply.type === 'complete') {
       if (!complete) { complete = true; arm(!signal?.aborted && !failure) }
     } else if (complete) {

@@ -11,6 +11,8 @@ export interface CodeBuddyModel {
   maxTokens?: number
   efforts?: string[]
   defaultEffort?: string
+  supportsImages: boolean
+  maxImageCount?: number
 }
 
 export function modelsFromRaw(models: readonly RawLanguageModel[]): CodeBuddyModel[] {
@@ -21,6 +23,8 @@ export function modelsFromRaw(models: readonly RawLanguageModel[]): CodeBuddyMod
     id: model.id, name: model.name ?? model.id,
     contextWindow: model.contextWindow?.defaultLength ?? model.maxInputTokens,
     maxTokens: model.maxOutputTokens,
+    supportsImages: model.supportsImages === true && model.disabledMultimodal !== true,
+    ...(model.maxImageCount > 0 ? { maxImageCount: model.maxImageCount } : {}),
     efforts: [...new Set([...(!model.onlyReasoning || reasoning?.canDisableThinking ? ['off'] : []), ...(model.reasoning?.supportedEfforts
       ?? (model.reasoning?.effort ? [model.reasoning.effort] : []))])],
     defaultEffort: model.reasoning?.defaultEffort ?? model.reasoning?.effort,

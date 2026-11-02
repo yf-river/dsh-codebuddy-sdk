@@ -57,7 +57,7 @@ async function execute(request: WorkerRequest): Promise<void> {
       }
       if (completed) return
       send({ type: 'message', message: raw })
-      if (raw.type === 'response_done') {
+      if (raw.type === 'response_done' && !request.search) {
         // DSH 消费单次模型响应；SDK 的工具/agent 循环属于收尾，不能阻塞完成确认。
         completed = true
         send({ type: 'complete' })
@@ -69,15 +69,33 @@ async function execute(request: WorkerRequest): Promise<void> {
     const bridge = new CodeBuddyToolBridge(request.tools)
     const mcp = request.tools.length ? await bridge.sdkServer(controller.signal) : undefined
     const result = await sdk.query(id, request.input, {
-      model: request.model, cwd: request.cwd, systemPrompt: request.system || ' ', tools: [], disallowedTools: ['Read'],
+      model: request.model, cwd: request.cwd, systemPrompt: request.system || ' ', tools: request.search ? ['WebSearch'] : [],
+      // WebSearch 带有 read 别名；搜索分支用单工具白名单，避免 Read 排除项将其过滤。
+      ...(!request.search ? { disallowedTools: ['Read'] } : {}),
+      ...(request.search ? { maxTurns: 1 } : {}),
       includePartialMessages: true, persistSession: false, permissionMode: 'default',
       auth: { accessToken: auth.userinfo.token },
       account: { uid: auth.userinfo.userId, ...(auth.userinfo.enterpriseId ? { enterpriseId: auth.userinfo.enterpriseId } : {}) },
       mcpServers: mcp ? { custom_tools: mcp } : {},
       canUseTool: async (name, _input) => {
+        if (request.search) return name === 'WebSearch'
+          ? { behavior: 'allow', updatedInput: { query: request.search.query } }
+          : { behavior: 'deny', message: 'Only WebSearch may execute' }
         try { bridge.harnessName(name); return { behavior: 'deny', message: 'DSH executes this tool after the model response' } }
         catch { return { behavior: 'deny', message: 'Only DSH declared tools may execute' } }
       },
+      ...(request.search ? { hooks: {
+        PreToolUse: [{ matcher: 'WebSearch', hooks: [async () => ({ hookSpecificOutput: {
+          hookEventName: 'PreToolUse' as const, permissionDecision: 'allow' as const, updatedInput: { query: request.search.query },
+        } })] }],
+        PostToolUse: [{ matcher: 'WebSearch', hooks: [async (input) => {
+        if (input.tool_input.query !== request.search.query) throw new Error('CodeBuddy 搜索工具改写了原查询')
+        send({ type: 'message', message: { type: 'web_search_result', searchResult: input.tool_response } })
+        completed = true
+        send({ type: 'complete' })
+        controller.abort()
+        return { continue: false }
+      }] }] } } : {}),
       abortController: controller,
       thinking: request.effort === 'off' ? { type: 'disabled' } : request.effort ? { type: 'adaptive' } : undefined,
       effort: request.effort === 'off' ? undefined : request.effort as 'low' | 'high' | 'max',
@@ -94,6 +112,6 @@ async function execute(request: WorkerRequest): Promise<void> {
     }
     if (!completed && policy.failure) throw policy.failure
     if (subscriptionError) throw subscriptionError
-    if (!completed) throw failureOf(result.errorMessage ?? `模型输出未完整结束：${result.stopReason}`)
+    if (!completed) throw failureOf(result.errorMessage ?? (request.search ? 'CodeBuddy 未返回原生搜索工具结果' : `模型输出未完整结束：${result.stopReason}`))
   } finally { subscription(); await sdk.close(id); await runtime.stop() }
 }

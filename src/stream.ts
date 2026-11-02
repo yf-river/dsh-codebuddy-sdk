@@ -7,6 +7,7 @@ interface Delta { refusal?: string; content?: string; reasoning_content?: string
 interface Output { type: string; text?: string; refusal?: string; callId?: string; name?: string; arguments?: string; content?: { type: string; text?: string; refusal?: string }[]; summary?: { text?: string }[] }
 export interface ModelEvent {
   type: string
+  searchResult?: unknown
   event?: { model?: string; choices?: { delta?: Delta; finish_reason?: string | null }[]; usage?: Record<string, unknown> }
   providerData?: { model?: string }
   delta?: string
@@ -39,7 +40,7 @@ function detailTokenCount(details: unknown, key: 'cached_tokens' | 'cache_write_
   return found ? total : undefined
 }
 
-function usageOf(raw: Record<string, unknown> | undefined): TokenUsage | undefined {
+export function usageOf(raw: Record<string, unknown> | undefined): TokenUsage | undefined {
   if (!raw) return undefined
   const input = raw.prompt_tokens ?? raw.inputTokens
   const output = raw.completion_tokens ?? raw.outputTokens

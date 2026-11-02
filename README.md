@@ -36,11 +36,26 @@ Select `codebuddy/deepseek-v4.1-flash` in DSH. Enabling or disabling this plugin
 
 Each generation receives DSH's complete current native role history. Compaction, pruning, edits and process restart do not require importing a persistent SDK session. Tool calls and results retain their IDs, including parallel identical calls. Invalid or incomplete tool relationships fail before provider I/O.
 
-DSH executes every business tool. The SDK receives declarations through public MCP APIs, is denied tool execution, and is limited to one outbound model request by the official HTTP host policy. Each request runs in a separate child process. Official SDK authentication supplies the current login directly in worker memory; the plugin does not decode or persist credentials.
+DSH executes every tool declared for the conversation. Ordinary model workers receive declarations through public MCP APIs, deny SDK tool execution, and allow one outbound model request through the official HTTP host policy. Native web search runs in its own worker with only WebSearch enabled. Each request runs in a separate child process. Official SDK authentication supplies the current login directly in worker memory; the plugin does not decode or persist credentials.
 
 DSH system prompts override defaults. Controllable CodeBuddy project rules, memory and background work are disabled. DSH owns compaction; the host policy blocks additional SDK recovery model requests. Summary requests are independent calls using DSH's history and instructions.
 
 Token usage separates uncached input, cache reads, cache writes and output. Unknown usage remains unknown. Token counts are not currency charges. The gateway zero-fills Anthropic cache names and reports the real hit under `prompt_tokens_details.cached_tokens` / `prompt_cache_hit_tokens`; the adapter reads the first positive value across the supported names. `prompt_cache_miss_tokens` is uncached input, not an extra cache-write bucket.
+
+## Web search and fetch
+
+When DSH's web service is mounted, the plugin registers the `codebuddy` search provider. It runs the official SDK's native `WebSearch` tool using the existing CodeBuddy sign-in, with no DeepSeek API key. Only structured tool results become sources; model-written links are never substituted for search results.
+
+```yaml
+- id: web
+  config:
+    searchProvider: codebuddy
+    fetchProvider: http
+```
+
+The built-in `http` fetch provider retrieves public pages anonymously. Search defaults to `hy4-preview-ioa`; `searchModel` selects an exact auxiliary model without changing the conversation model. Each search performs one model call and one native search, subject to that model's allowance and service availability. Auxiliary usage is written to structured `codebuddy/search-usage` runtime logs with the initiating session ID when present, separately from conversation-step usage. Cancellation is supported and the operation times out after 90 seconds. Missing native tool results fail explicitly.
+
+The `deepseek-search-api`, `deepseek-fetch-api`, and `deepseek-official` backends use independent DeepSeek credentials and do not inherit CodeBuddy authentication.
 
 ## Failure handling
 
@@ -52,7 +67,7 @@ A completed model response has a 5-second SDK cleanup deadline and a further 1-s
 
 ## Boundaries and verification
 
-Text messages and text tool results are supported. Unsupported content and explicit unverified `temperature`/`stop` settings are rejected. CodeBuddy retains its user-query wrapper, merges adjacent user messages, prefixes MCP tools, and supplies some parameter defaults. It can change top-level schema `additionalProperties`. Fresh runtime startup adds latency. Model quality and deployment identity are not guaranteed to match the official DeepSeek API.
+Text, user images, and image-bearing tool results are supported. Image bytes come from the DSH attachment service; model vision capabilities come from the CodeBuddy catalog. Offloaded images retain DSH text placeholders. Unsupported content and explicit unverified `temperature`/`stop` settings are rejected. CodeBuddy retains its user-query wrapper, merges adjacent user messages, prefixes MCP tools, and supplies some parameter defaults. It can change top-level schema `additionalProperties`. Fresh runtime startup adds latency. Model quality and deployment identity are not guaranteed to match the official DeepSeek API.
 
 ```sh
 npm run typecheck

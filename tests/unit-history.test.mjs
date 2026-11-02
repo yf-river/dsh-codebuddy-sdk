@@ -27,8 +27,17 @@ test('缺失、重复和未知工具结果在生成前失败',()=>{
  assert.throws(()=>requestHistory({messages:[{role:'assistant',content:[call('a'),call('a')]}]}),/重复/)
  assert.throws(()=>requestHistory({messages:[{role:'assistant',content:[call('a')]},result('a'),result('a')]}),/重复/)
 })
-test('图片和未支持的内容明确报错',()=>{
- assert.throws(()=>requestHistory({messages:[{role:'user',content:[{type:'image'}]}]}),/不支持/)
+test('缺少图片附件引用时明确报错',()=>{
+ assert.throws(()=>requestHistory({messages:[{role:'user',content:[{type:'image'}]}]}),/附件引用/)
+})
+test('图文混排、历史图片和工具截图保留顺序与调用关联',()=>{
+ const image={type:'image',attachment:{attachmentId:'image-1'}}
+ const {input}=requestHistory({messages:[{role:'user',content:[{type:'text',text:'before'},image,{type:'text',text:'after'}]},text('assistant','seen'),{role:'assistant',content:[call('screen')]},{role:'tool',source:{callId:'screen'},content:[{type:'text',text:'screenshot'},image]},text('user','compare')]},new Map([['image-1','data:image/png;base64,AA==']]))
+ assert.deepEqual(input[0].content.map(x=>x.type),['input_text','input_image','input_text'])
+ assert.equal(input[0].content[1].image,'data:image/png;base64,AA==')
+ const result=input.find(x=>x.type==='function_call_result')
+ assert.equal(result.callId,'screen')
+ assert.deepEqual(result.output.map(x=>x.type),['input_text','input_image'])
 })
 test('推理以原生 assistant 字段回传，工具调用保留相同推理',()=>{
  const {input}=requestHistory({messages:[text('user','u'),{role:'assistant',content:[{type:'reasoning',text:'why'},call('a')]},result('a')]})
