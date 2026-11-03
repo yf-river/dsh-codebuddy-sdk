@@ -44,3 +44,10 @@ test('推理以原生 assistant 字段回传，工具调用保留相同推理',(
  assert.equal(input.find(x=>x.type==='function_call').providerData.reasoning_content,'why')
  assert.equal(input.some(x=>x.role==='user'&&JSON.stringify(x).includes('why')),false)
 })
+
+test('历史工具声明与结果使用一致的安全别名',()=>{
+ const name='mcp__acceptance-browser__screenshot'
+ const {input}=requestHistory({messages:[text('user','u'),{role:'assistant',content:[{type:'tool-call',id:'a',name,arguments:'{}'}]},result('a','screen')]})
+ assert.equal(input[1].name,input[2].name)
+ assert.match(input[1].name,/^mcp__custom_tools__mcp__acceptance_browser__screenshot_[a-f0-9]{16}$/)
+})

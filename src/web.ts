@@ -42,7 +42,7 @@ export class CodeBuddySearchProvider implements WebSearchProvider {
     const bounded = AbortSignal.any([...(signal ? [signal] : []), AbortSignal.timeout(90000)])
     const worker = runWorker({ model, cwd: this.config.cwd ?? process.cwd(), system: 'Use the WebSearch tool once. Do not use other tools.',
       input: [{ type: 'message', role: 'user', content: [{ type: 'input_text', text: `Search the web. You must call WebSearch exactly once with query ${JSON.stringify(request.query)}. Do not answer without searching.` }] }],
-      tools: [], maxTokens: 1024, search: { query: request.query } }, bounded)
+      tools: [], maxTokens: 1024, ...(model === 'deepseek-v4.1-flash' ? { effort: 'high' } : {}), search: { query: request.query } }, bounded)
     this.active.add(worker)
     let raw: unknown, usage: ReturnType<typeof usageOf>
     try {

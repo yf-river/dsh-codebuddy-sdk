@@ -18,7 +18,7 @@ npm run build
 dsh plugin --profile web add /data/ida/ai/dsh-codebuddy-sdk
 ```
 
-安装命令会修改指定 profile。本次开发使用临时 profile，未安装到日常 web profile。
+安装命令会修改指定 profile。选择目标 profile 后，通过该 profile 的正常加载流程验证实际版本。
 
 在 DSH 中选择 `codebuddy/deepseek-v4.1-flash`。插件启停不会自动改变默认模型；关闭后需要在 DSH 选择已经配置好的官方 DeepSeek 路由。
 
@@ -27,6 +27,7 @@ dsh plugin --profile web add /data/ida/ai/dsh-codebuddy-sdk
   name: dsh-codebuddy-sdk
   config:
     model: deepseek-v4.1-flash
+    searchModel: deepseek-v4.1-flash
     maxTokens: 8192
 ```
 
@@ -42,7 +43,9 @@ dsh plugin --profile web add /data/ida/ai/dsh-codebuddy-sdk
 - 账号认证通过官方 SDK 公开认证接口沿用登录态，凭据仅在 worker 内存中传递，不保存到插件文件。
 - DSH 系统提示词覆盖默认提示词，关闭可控的 CodeBuddy 规则、自动记忆和后台任务；SDK 额外压缩恢复的模型请求由宿主策略阻止。
 
-历史转换接受文本消息、用户图片和工具截图；图片通过 DSH 附件服务读取，模型图片能力来自 CodeBuddy 账号目录。已卸载图片使用 DSH 的文字占位。缺失工具结果、重复调用 ID 等无效关系会在模型请求前报错。DSH 自己的会话编辑、恢复和压缩入口仍受 DSH 的规则约束。
+工具名称采用稳定的双向映射，含连字符的名称与下划线名称可同时区分，原始 DSH 名称保留在工具描述中。
+
+历史转换接受文本消息、用户图片和工具截图；图片通过 DSH 附件服务读取，模型图片能力来自 CodeBuddy 账号目录。已卸载图片使用 DSH 的文字占位。CodeBuddy DeepSeek v4.1 Flash high 已通过当前图片、历史图片及刷新后续问验证；其他模型的行为需分别验收。缺失工具结果、重复调用 ID 等无效关系会在模型请求前报错。DSH 自己的会话编辑、恢复和压缩入口仍受 DSH 的规则约束。
 
 ## 网页搜索和抓取
 
@@ -55,7 +58,7 @@ dsh plugin --profile web add /data/ida/ai/dsh-codebuddy-sdk
     fetchProvider: http
 ```
 
-`http` 抓取使用 DSH 内置的匿名公共网页后端。CodeBuddy 搜索默认使用 `hy4-preview-ioa`，可通过插件的 `searchModel` 指定精确模型。每次搜索包含一次独立模型调用和一次原生搜索，受所选模型的额度、可用性与搜索服务约束；不会切换当前聊天模型。辅助用量写入 `codebuddy/search-usage` 结构化运行日志，包含发起会话 ID（若有），不混入聊天模型单步用量。搜索支持取消，90 秒超时；未得到工具结果时明确失败。
+`http` 抓取使用 DSH 内置的匿名公共网页后端。CodeBuddy 搜索默认使用 `hy4-preview-ioa`，可通过插件的 `searchModel` 指定精确模型。每次搜索包含一次独立模型调用和一次原生搜索，受所选模型的额度、可用性与搜索服务约束；不会切换当前聊天模型。显式选择 `deepseek-v4.1-flash` 搜索时使用 high。辅助用量写入 `codebuddy/search-usage` 结构化运行日志，包含发起会话 ID（若有），不混入聊天模型单步用量。搜索支持取消，90 秒超时；未得到工具结果时明确失败。
 
 DeepSeek 的 `deepseek-search-api`、`deepseek-fetch-api` 和 `deepseek-official` 是独立后端，不会自动使用 CodeBuddy 登录态。
 

@@ -15,9 +15,13 @@ process.on('message',packet=>{
   setTimeout(()=>{send({type:'web_search_result',searchResult:{type:'web_search_tool_result',results:[]}});process.send({type:'complete'},()=>{process.disconnect();setImmediate(()=>process.exit(0))})},5500)
   return
  }
+ // 正常夹具与真实 worker 一样等待 IPC 写完，退出不能丢掉完成通知。
+ if(scenario==='normal'||scenario==='orphan-pipe'){
+  process.send({type:'complete'},()=>{process.disconnect();setImmediate(()=>process.exit(0))})
+  return
+ }
  if(scenario!=='no-complete')process.send({type:'complete'})
- if(scenario==='normal'||scenario==='orphan-pipe')process.disconnect(),setImmediate(()=>process.exit(0))
- else if(scenario==='bad-exit')setImmediate(()=>process.exit(2))
- else if(scenario==='cleanup-error'){process.send({type:'failure',failure:{code:'SERVER',message:'fixture cleanup failed'}});setImmediate(()=>process.exit(0))}
+ if(scenario==='bad-exit')setImmediate(()=>process.exit(2))
+ else if(scenario==='cleanup-error')process.send({type:'failure',failure:{code:'SERVER',message:'fixture cleanup failed'}},()=>process.exit(0))
  else setInterval(()=>{},1000)
 })

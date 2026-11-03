@@ -1,3 +1,4 @@
+import { codeBuddyToolName } from './tool-bridge.js'
 import { LlmError } from '@deepseek-ai/dsh-llm'
 import type { GenerateOptions } from '@deepseek-ai/dsh-llm'
 import { offloadedImageText } from '@deepseek-ai/dsh-llm'
@@ -40,7 +41,7 @@ export function requestHistory(options: GenerateOptions, images: ReadonlyMap<str
         return { type: 'input_text', text: block.text }
       })
       const output = parts.some(part => part.type === 'input_image') ? parts : parts.map(part => (part as { text: string }).text).join('\n')
-      input.push({ type: 'function_call_result', callId, name: `mcp__custom_tools__${name}`, output, status: 'completed',
+      input.push({ type: 'function_call_result', callId, name: `mcp__custom_tools__${codeBuddyToolName(name)}`, output, status: 'completed',
         ...(message.isError ? { providerData: { isError: true } } : {}) })
       pending.delete(callId)
       continue
@@ -69,7 +70,7 @@ export function requestHistory(options: GenerateOptions, images: ReadonlyMap<str
         if (!block.id || seen.has(block.id)) unsupported('工具调用 ID 缺失或重复')
         try { JSON.parse(block.arguments) } catch { unsupported('工具参数不是有效 JSON') }
         seen.add(block.id); pending.set(block.id, block.name)
-        input.push({ type: 'function_call', callId: block.id, name: `mcp__custom_tools__${block.name}`, arguments: block.arguments, status: 'completed', ...(providerData ? { providerData } : {}) })
+        input.push({ type: 'function_call', callId: block.id, name: `mcp__custom_tools__${codeBuddyToolName(block.name)}`, arguments: block.arguments, status: 'completed', ...(providerData ? { providerData } : {}) })
         emitted = true
       } else unsupported(`暂不支持 ${message.role} 中的 ${block.type} 内容`)
     }

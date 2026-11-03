@@ -17,3 +17,14 @@ test('搜索取消和插件卸载不会启动新 worker',async()=>{
  assert.equal(provider.available(),false)
  await assert.rejects(provider.search({query:'q'}),/已关闭/)
 })
+
+test('DeepSeek Flash 搜索显式使用 high，并记录实际辅助模型',async()=>{
+ const childProcess=await import('node:child_process'),{syncBuiltinESMExports}=await import('node:module'),{EventEmitter}=await import('node:events'),{PassThrough}=await import('node:stream')
+ const original=childProcess.default.fork;let sent,record
+ childProcess.default.fork=()=>{
+  const child=new EventEmitter();child.stderr=new PassThrough();child.connected=false;child.unref=()=>{}
+  child.send=(packet,callback)=>{sent=packet.request;queueMicrotask(()=>{child.emit('message',{type:'message',message:{type:'web_search_result',searchResult:{type:'web_search_tool_result',results:[{url:'https://example.com',title:'source'}]}}});child.emit('message',{type:'complete'});child.emit('close',0);callback?.()})};return child
+ };syncBuiltinESMExports()
+ try{const provider=new CodeBuddySearchProvider({searchModel:'deepseek-v4.1-flash'},e=>record=e);const result=await provider.search({query:'q'});assert.equal(sent.model,'deepseek-v4.1-flash');assert.equal(sent.effort,'high');assert.equal(sent.maxTokens,1024);assert.equal(result.sources.length,1);assert.equal(record.model,'deepseek-v4.1-flash');await provider.dispose()}
+ finally{childProcess.default.fork=original;syncBuiltinESMExports()}
+})

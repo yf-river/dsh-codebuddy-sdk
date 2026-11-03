@@ -18,7 +18,7 @@ npm run build
 dsh plugin --profile web add /data/ida/ai/dsh-codebuddy-sdk
 ```
 
-The final command changes that profile. Development acceptance uses temporary profiles; your everyday profile is not installed or changed.
+The final command changes the selected profile. Verify the loaded version through that profile’s normal loading process.
 
 Select `codebuddy/deepseek-v4.1-flash` in DSH. Enabling or disabling this plugin does not change your default model automatically. Select your configured official DeepSeek route when switching back.
 
@@ -27,6 +27,7 @@ Select `codebuddy/deepseek-v4.1-flash` in DSH. Enabling or disabling this plugin
   name: dsh-codebuddy-sdk
   config:
     model: deepseek-v4.1-flash
+    searchModel: deepseek-v4.1-flash
     maxTokens: 8192
 ```
 
@@ -34,7 +35,7 @@ Select `codebuddy/deepseek-v4.1-flash` in DSH. Enabling or disabling this plugin
 
 ## Behavior
 
-Each generation receives DSH's complete current native role history. Compaction, pruning, edits and process restart do not require importing a persistent SDK session. Tool calls and results retain their IDs, including parallel identical calls. Invalid or incomplete tool relationships fail before provider I/O.
+Each generation receives DSH's complete current native role history. Compaction, pruning, edits and process restart do not require importing a persistent SDK session. Stable bidirectional names distinguish hyphenated tools from underscored tools, with original DSH names included in aliased tool descriptions. Tool calls and results retain their IDs, including parallel identical calls. Invalid or incomplete tool relationships fail before provider I/O.
 
 DSH executes every tool declared for the conversation. Ordinary model workers receive declarations through public MCP APIs, deny SDK tool execution, and allow one outbound model request through the official HTTP host policy. Native web search runs in its own worker with only WebSearch enabled. Each request runs in a separate child process. Official SDK authentication supplies the current login directly in worker memory; the plugin does not decode or persist credentials.
 
@@ -53,7 +54,7 @@ When DSH's web service is mounted, the plugin registers the `codebuddy` search p
     fetchProvider: http
 ```
 
-The built-in `http` fetch provider retrieves public pages anonymously. Search defaults to `hy4-preview-ioa`; `searchModel` selects an exact auxiliary model without changing the conversation model. Each search performs one model call and one native search, subject to that model's allowance and service availability. Auxiliary usage is written to structured `codebuddy/search-usage` runtime logs with the initiating session ID when present, separately from conversation-step usage. Cancellation is supported and the operation times out after 90 seconds. Missing native tool results fail explicitly.
+The built-in `http` fetch provider retrieves public pages anonymously. Search defaults to `hy4-preview-ioa`; `searchModel` selects an exact auxiliary model without changing the conversation model. Explicit `deepseek-v4.1-flash` searches use high effort. Each search performs one model call and one native search, subject to that model's allowance and service availability. Auxiliary usage is written to structured `codebuddy/search-usage` runtime logs with the initiating session ID when present, separately from conversation-step usage. Cancellation is supported and the operation times out after 90 seconds. Missing native tool results fail explicitly.
 
 The `deepseek-search-api`, `deepseek-fetch-api`, and `deepseek-official` backends use independent DeepSeek credentials and do not inherit CodeBuddy authentication.
 
@@ -67,7 +68,7 @@ A completed model response has a 5-second SDK cleanup deadline and a further 1-s
 
 ## Boundaries and verification
 
-Text, user images, and image-bearing tool results are supported. Image bytes come from the DSH attachment service; model vision capabilities come from the CodeBuddy catalog. Offloaded images retain DSH text placeholders. Unsupported content and explicit unverified `temperature`/`stop` settings are rejected. CodeBuddy retains its user-query wrapper, merges adjacent user messages, prefixes MCP tools, and supplies some parameter defaults. It can change top-level schema `additionalProperties`. Fresh runtime startup adds latency. Model quality and deployment identity are not guaranteed to match the official DeepSeek API.
+Text, user images, and image-bearing tool results are supported. Image bytes come from the DSH attachment service; model vision capabilities come from the CodeBuddy catalog. Offloaded images retain DSH text placeholders. CodeBuddy DeepSeek v4.1 Flash high has passed current-image, historical-image and refresh/resume acceptance; other models require their own checks. Unsupported content and explicit unverified `temperature`/`stop` settings are rejected. CodeBuddy retains its user-query wrapper, merges adjacent user messages, prefixes MCP tools, and supplies some parameter defaults. It can change top-level schema `additionalProperties`. Fresh runtime startup adds latency. Model quality and deployment identity are not guaranteed to match the official DeepSeek API.
 
 ```sh
 npm run typecheck
