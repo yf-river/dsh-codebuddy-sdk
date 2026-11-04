@@ -22,6 +22,8 @@ dsh plugin --profile web add /data/ida/ai/dsh-codebuddy-sdk
 
 在 DSH 中选择 `codebuddy/deepseek-v4.1-flash`。插件启停不会自动改变默认模型；关闭后需要在 DSH 选择已经配置好的官方 DeepSeek 路由。
 
+Hy4 使用账号目录中的 `codebuddy/hy4std`，推理档位为 `high`。插件识别实际响应的 `hy4-ioa` 名称，并保留原始返回模型 ID；预览版与其他模型仍分别校验。
+
 ```yaml
 - id: codebuddy
   name: dsh-codebuddy-sdk

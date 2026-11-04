@@ -66,6 +66,18 @@ test('错误模型、工具 ID 不一致和不完整流明确失败',async()=>{
  await assert.rejects(()=>collect([raw({tool_calls:[{index:0,id:'a',function:{name:'read',arguments:'{}'}}]}),done([tool('b')])]),/ID.*不一致/)
  await assert.rejects(()=>collect([raw({content:'partial'})]),/完整输出之前/)
 })
+test('Hy4 实际响应名称通过校验，保留正文、用量和原始模型 ID',async()=>{
+ const events=[{type:'response_started',providerData:{model:'hy4-ioa'}},
+  {type:'model',event:{model:'hy4-ioa',choices:[{delta:{content:'Hello!'},finish_reason:'stop'}],usage:{prompt_tokens:23,completion_tokens:4}}},done([text('Hello!')])]
+ const source=(async function*(){yield*events})();const chunks=[]
+ const stream=translateStep(source,new CodeBuddyToolBridge([]),'hy4std')
+ let next
+ while(!(next=await stream.next()).done)chunks.push(next.value)
+ const assembled=new BlockAssembler();chunks.forEach(chunk=>assembled.push(chunk))
+ assert.deepEqual(assembled.blocks(),[{type:'text',text:'Hello!'}])
+ assert.equal(assembled.usage.totalTokens,27)
+ assert.equal(next.value.model,'hy4-ioa')
+})
 test('空回复和仅推理的正常结束不能冒充回答',async()=>{
  for(const events of [[raw({},'stop'),done([])],[raw({reasoning_content:'thinking'},'stop'),done([])]])
   await assert.rejects(()=>collect(events),e=>e.code==='EMPTY_RESPONSE')

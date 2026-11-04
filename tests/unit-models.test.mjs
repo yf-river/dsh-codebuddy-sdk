@@ -22,3 +22,11 @@ test('接受企业部署后缀并拒绝其他模型/版本的替换', () => {
   assert.equal(sameModel('deepseek-v4.1-flash', 'deepseek-v4-pro-ioa'), false)
   assert.equal(sameModel('deepseek-v4.1-flash', 'hy3'), false)
 })
+test('Hy4 目录名称与实际响应名称互认，预览版和其他模型仍需区分', () => {
+  assert.equal(sameModel('hy4std', 'hy4-ioa'), true)
+  assert.equal(sameModel('hy4-ioa', 'hy4std'), true)
+  assert.equal(sameModel('hy4std', 'hy4std'), true)
+  assert.equal(sameModel('hy4std', 'hy4-preview-ioa'), false)
+  assert.equal(sameModel('hy4std', 'hy3-ioa'), false)
+  assert.equal(sameModel('hy4std', 'deepseek-v4.1-flash'), false)
+})

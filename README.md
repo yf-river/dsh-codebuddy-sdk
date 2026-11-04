@@ -22,6 +22,8 @@ The final command changes the selected profile. Verify the loaded version throug
 
 Select `codebuddy/deepseek-v4.1-flash` in DSH. Enabling or disabling this plugin does not change your default model automatically. Select your configured official DeepSeek route when switching back.
 
+For Hy4, select the catalog entry `codebuddy/hy4std` with `high` reasoning. The plugin accepts the reported `hy4-ioa` alias and preserves the original response model ID; preview releases and other models are still checked separately.
+
 ```yaml
 - id: codebuddy
   name: dsh-codebuddy-sdk

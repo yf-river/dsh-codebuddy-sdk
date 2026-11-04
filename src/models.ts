@@ -1,7 +1,13 @@
 import type { RawLanguageModel } from '@tencent-ai/agent-sdk'
 
+function canonicalModelId(id: string): string {
+  const base = id.replace(/-ioa$/, '')
+  // Hy4 账号目录使用 hy4std，实际响应使用 hy4-ioa。
+  return base === 'hy4std' ? 'hy4' : base
+}
+
 export function sameModel(requested: string, reported: string): boolean {
-  return requested.replace(/-ioa$/, '') === reported.replace(/-ioa$/, '')
+  return canonicalModelId(requested) === canonicalModelId(reported)
 }
 
 export interface CodeBuddyModel {
