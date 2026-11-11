@@ -3,6 +3,7 @@ import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprot
 import type { ToolSchema } from '@deepseek-ai/dsh-llm'
 
 const PREFIX = 'mcp__custom_tools__'
+const SINGLE_PREFIX = 'mcp__custom_tools_'
 // CodeBuddy 会改写连字符；声明和历史共用稳定别名，哈希区分名称归一化后的碰撞。
 export function codeBuddyToolName(name: string): string {
   if (/^[a-zA-Z0-9_]{1,64}$/.test(name)) return name
@@ -20,7 +21,10 @@ export class CodeBuddyToolBridge {
     }
   }
   harnessName(name: string): string {
-    const value = name.startsWith(PREFIX) ? name.slice(PREFIX.length) : name
+    // 部分模型会把 MCP 前缀的最后一个双下划线写成单下划线；仅按已声明别名容错。
+    const value = name.startsWith(PREFIX) ? name.slice(PREFIX.length)
+      : name.startsWith(SINGLE_PREFIX) ? name.slice(SINGLE_PREFIX.length)
+        : name
     const original = this.names.get(value)
     if (original === undefined) throw new Error(`模型调用了未声明的工具 ${name}`)
     return original

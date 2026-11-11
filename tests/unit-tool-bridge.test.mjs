@@ -23,6 +23,15 @@ test('允许同名同参数调用，拒绝重复 ID 和额外工具',()=>{
  assert.throws(()=>bridge.harnessName('Bash'),/未声明/)
 })
 
+test('模型把 MCP 前缀写成单下划线时仍解析到已声明工具',()=>{
+ const bridge=new CodeBuddyToolBridge([{name:'bash',description:'',parameters:schema}])
+ assert.equal(bridge.harnessName('bash'),'bash')
+ assert.equal(bridge.harnessName('mcp__custom_tools__bash'),'bash')
+ assert.equal(bridge.harnessName('mcp__custom_tools_bash'),'bash')
+ assert.throws(()=>bridge.harnessName('mcp__custom_tools__missing'),/未声明/)
+ assert.throws(()=>bridge.harnessName('mcp__custom_tools_missing'),/未声明/)
+})
+
 test('连字符和下划线工具使用不同声明名称，返回调用准确映射', async t => {
  const tools=['mcp__acceptance-browser__screenshot','mcp__acceptance_browser__screenshot'].map(name=>({name,description:name,parameters:{type:'object',properties:{}}}))
  const bridge=new CodeBuddyToolBridge(tools),controller=new AbortController()
