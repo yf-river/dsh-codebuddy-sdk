@@ -24,6 +24,8 @@
 
 2026-10-28 复核并修复了缓存字段读取：网关在第二轮真实调用返回 `prompt_tokens_details.cached_tokens=3840`、`prompt_cache_hit_tokens=3840`、`prompt_cache_miss_tokens=229`，同时把 `cache_read_input_tokens` 零填为 0；旧实现用 `??` 短路，导致缓存读取恒 0。修复后同一 fixture 得到 `cacheReadTokens=3840`、`inputTokens=229`、`totalTokens=4071`；headless 真实第二轮得到 `cacheReadTokens=18688`、`inputTokens=145`。上面的历史 0 值保留为修复前证据。
 
+2026-11-13 工具面收敛：52 个近期会话、9,540 次工具调用中 `bash` 占 8,140 次，前 30 个工具覆盖几乎全部调用，MCP 工具只有个位数到十几次；失败会话一次暴露约 160–164 个工具，并在会话中途从 160 缩到 138，模型继续调用已移除的 OpenViking 工具。0.1.14 增加 `toolPolicy` 过滤模型可见工具，推荐 web 默认排除 TAPD/工蜂，纯编码面可排除全部 `mcp__*`；OpenViking 自动召回与会话捕获不依赖模型可见的 MCP 工具。0.1.13 的别名和 `CODEBUDDY_UNKNOWN_TOOL` 保留为兜底。
+
 手动压缩将可见历史估算从 7,004 降至 1,154 token，替换约 6,348 token 的旧消息；自动压缩另替换约 2,277 token 的历史片段。两份摘要均保留验收码和归档口令，后续实际请求已移除被压缩消息的 ID，重启后仍能回答并读取新文件。
 
 首次真实运行在第 4 次后因测试脚本误判停止：模型摘要引用了原文测试标记，脚本据此误判原文残留。原始消息节点实际上已被新摘要替换。校验已修正为消息 ID 比较，补充独立回归检查，并保留 `artifacts/daily-live/initial-report.json`。随后沿用原会话和原预算完成剩余 4 次；未重跑前四次，未追加额度。

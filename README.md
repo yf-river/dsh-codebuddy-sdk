@@ -31,9 +31,15 @@ For Hy4, select the catalog entry `codebuddy/hy4std` with `high` reasoning. The 
     model: deepseek-v4.1-flash
     searchModel: deepseek-v4.1-flash
     maxTokens: 8192
+    toolPolicy:
+      deny:
+        - 'mcp__tapd__*'
+        - 'mcp__gongfeng__*'
 ```
 
 `provider` overrides the route, `cwd` sets the runtime directory, and `contextWindow` overrides DSH budgeting metadata. Per-request `maxTokens` takes precedence. Remove the legacy `pathToCodebuddyCode` option; Server uses its pinned dependency.
+
+`toolPolicy` filters model-visible tools: omitted `allow` means every tool, `deny` wins after `allow`, and `*` is the only wildcard. The example keeps core tools and OpenViking while excluding TAPD/Gongfeng; use `deny: ['mcp__*']` for a core-only coding surface. It changes only what the model sees, not DSH execution permissions; filtered tools never reach the model-visible list.
 
 ## Behavior
 

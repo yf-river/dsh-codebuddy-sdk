@@ -6,6 +6,7 @@ import z from '@deepseek-ai/schemastery'
 import { modelsFromRaw, type CodeBuddyModel } from './models.js'
 import { translateStep } from './stream.js'
 import { CodeBuddyToolBridge } from './tool-bridge.js'
+import { selectTools, type ToolPolicy } from './tool-policy.js'
 import { requestHistory, unsupported } from './history.js'
 import { llmError } from './errors.js'
 import { runWorker } from './runtime.js'
@@ -21,6 +22,7 @@ export interface Config {
   contextWindow?: number
   maxTokens?: number
   searchModel?: string
+  toolPolicy?: ToolPolicy
 }
 export const Config: z<Config> = z.object({
   provider: z.string().description('Provider route (default codebuddy)'),
@@ -30,6 +32,10 @@ export const Config: z<Config> = z.object({
   contextWindow: z.number().description('Context window override'),
   maxTokens: z.number().description('Maximum output tokens sent to the CLI'),
   searchModel: z.string().description('Model for auxiliary native web search (default hy4-preview-ioa)'),
+  toolPolicy: z.object({
+    allow: z.array(z.string()).description('Tool name patterns allowed to reach the model; omitted means all'),
+    deny: z.array(z.string()).description('Tool name patterns removed after allow; deny wins'),
+  }).description('Optional model-visible tool filter; `*` is the only wildcard'),
 })
 export const name = 'codebuddy'
 export const inject = ['llm']
@@ -118,8 +124,10 @@ class CodeBuddyAdapter extends LlmAdapter {
     }
     const images = await readImages(options, this.attachments(), this.models.find(candidate => candidate.id === model)?.maxImageCount)
     const history = requestHistory(options, images)
-    const bridge = new CodeBuddyToolBridge(options.tools ?? [])
-    const worker = runWorker({ ...history, model, cwd: this.config.cwd ?? process.cwd(), tools: options.tools ?? [], maxTokens, effort }, options.signal)
+    const tools = selectTools(options.tools ?? [], this.config.toolPolicy)
+    if (tools.length === 0) throw new LlmError('工具策略过滤后没有可用工具', 'CODEBUDDY_NO_TOOLS')
+    const bridge = new CodeBuddyToolBridge(tools)
+    const worker = runWorker({ ...history, model, cwd: this.config.cwd ?? process.cwd(), tools, maxTokens, effort }, options.signal)
     this.active.add(worker)
     const startedAt = performance.now()
     let reportedModel: string | undefined

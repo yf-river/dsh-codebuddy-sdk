@@ -31,9 +31,15 @@ Hy4 使用账号目录中的 `codebuddy/hy4std`，推理档位为 `high`。插�
     model: deepseek-v4.1-flash
     searchModel: deepseek-v4.1-flash
     maxTokens: 8192
+    toolPolicy:
+      deny:
+        - 'mcp__tapd__*'
+        - 'mcp__gongfeng__*'
 ```
 
 `provider` 指定路由名；`cwd` 指定运行目录；`contextWindow` 覆盖 DSH 的上下文预算；每次请求的 `maxTokens` 优先于插件配置。旧 `pathToCodebuddyCode` 配置需要删除，Server 使用锁定依赖。
+
+`toolPolicy` 过滤模型可见工具：`allow` 省略即全部，`deny` 在 `allow` 之后生效，`*` 是唯一通配符。上例保留核心工具和 OpenViking，排除 TAPD/工蜂；需要纯编码面时用 `deny: ['mcp__*']`。它只改变模型看到的工具，不改变 DSH 的执行权限；被过滤工具不会进入模型可见列表。
 
 ## 会话和工具
 
