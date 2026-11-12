@@ -1,6 +1,7 @@
 import {test} from 'node:test'
 import assert from 'node:assert/strict'
 import {failureOf,llmError} from '../src/errors.ts'
+import {UnknownToolError} from '../src/tool-bridge.ts'
 import {LlmError} from '@deepseek-ai/dsh-llm'
 test('错误经过 JSON IPC 后保留 DSH 恢复所需的字段',()=>{
  const original={code:'rate_limit_error',message:'slow down',status:429,providerRetryAfterMs:2500,requestId:'req-test',headers:{authorization:'SECRET'},request:{token:'SECRET'}}
@@ -24,4 +25,8 @@ test('忽略无效元数据并保留已有 LlmError',()=>{
  assert.equal(llmError(error),error)
  assert.deepEqual(failureOf({message:'x',status:999,providerRetryAfterMs:-1,requestId:1}),{message:'x',code:'CODEBUDDY_ERROR'})
  const circular={message:'x'};circular.cause=circular;assert.equal(failureOf(circular).message,'x')
+})
+test('未知工具使用专用错误码而不是通用 CodeBuddy 错误',()=>{
+ const failure=failureOf(new UnknownToolError('mcp__custom_tools_placeholder'))
+ assert.equal(failure.code,'CODEBUDDY_UNKNOWN_TOOL');assert.match(failure.message,/placeholder/)
 })

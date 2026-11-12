@@ -20,7 +20,7 @@ test('允许同名同参数调用，拒绝重复 ID 和额外工具',()=>{
  const bridge=new CodeBuddyToolBridge([{name:'read',description:'',parameters:schema}])
  bridge.noteToolCall('a','read',{});bridge.noteToolCall('b','read',{})
  assert.throws(()=>bridge.noteToolCall('a','read',{}),/重复/)
- assert.throws(()=>bridge.harnessName('Bash'),/未声明/)
+ assert.throws(()=>bridge.harnessName('Bash'),e=>e.code==='CODEBUDDY_UNKNOWN_TOOL')
 })
 
 test('模型把 MCP 前缀写成单下划线时仍解析到已声明工具',()=>{
@@ -28,8 +28,25 @@ test('模型把 MCP 前缀写成单下划线时仍解析到已声明工具',()=>
  assert.equal(bridge.harnessName('bash'),'bash')
  assert.equal(bridge.harnessName('mcp__custom_tools__bash'),'bash')
  assert.equal(bridge.harnessName('mcp__custom_tools_bash'),'bash')
- assert.throws(()=>bridge.harnessName('mcp__custom_tools__missing'),/未声明/)
- assert.throws(()=>bridge.harnessName('mcp__custom_tools_missing'),/未声明/)
+ assert.throws(()=>bridge.harnessName('mcp__custom_tools__missing'),e=>e.code==='CODEBUDDY_UNKNOWN_TOOL')
+ assert.throws(()=>bridge.harnessName('mcp__custom_tools_missing'),e=>e.code==='CODEBUDDY_UNKNOWN_TOOL')
+})
+
+test('大小写、下划线变体和嵌套 MCP 名按唯一别名解析',()=>{
+ const bridge=new CodeBuddyToolBridge([
+  {name:'todo_write',description:'',parameters:schema},
+  {name:'mcp__openviking__read',description:'',parameters:schema},
+  {name:'list_agents',description:'',parameters:schema},
+ ])
+ assert.equal(bridge.harnessName('mcp__custom_tools__todowrite'),'todo_write')
+ assert.equal(bridge.harnessName('TodoWrite'),'todo_write')
+ assert.equal(bridge.harnessName('mcp__custom_tools__mcp__openviking__read'),'mcp__openviking__read')
+ assert.equal(bridge.harnessName('mcp__custom_flow_tools__list_agents'),'list_agents')
+ assert.throws(()=>bridge.harnessName('mcp__custom_tools_placeholder'),e=>e.code==='CODEBUDDY_UNKNOWN_TOOL')
+ const ambiguous=new CodeBuddyToolBridge([{name:'read_file',description:'',parameters:schema},{name:'readfile',description:'',parameters:schema}])
+ assert.equal(ambiguous.harnessName('read_file'),'read_file')
+ assert.equal(ambiguous.harnessName('readfile'),'readfile')
+ assert.throws(()=>ambiguous.harnessName('ReadFile'),e=>e.code==='CODEBUDDY_UNKNOWN_TOOL')
 })
 
 test('连字符和下划线工具使用不同声明名称，返回调用准确映射', async t => {
@@ -43,6 +60,6 @@ test('连字符和下划线工具使用不同声明名称，返回调用准确�
  const names=declared.map(t=>t.name)
  assert.notEqual(names[0],names[1]);assert.ok(names.every(n=>/^[a-zA-Z0-9_]{1,64}$/.test(n)))
  for(let i=0;i<2;i++)assert.equal(bridge.harnessName('mcp__custom_tools__'+names[i]),tools[i].name)
- assert.throws(()=>bridge.harnessName('mcp__custom_tools__unregistered'),/未声明/)
+ assert.throws(()=>bridge.harnessName('mcp__custom_tools__unregistered'),e=>e.code==='CODEBUDDY_UNKNOWN_TOOL')
  assert.throws(()=>new CodeBuddyToolBridge([tools[0],{...tools[1],name:codeBuddyToolName(tools[0].name)}]),/冲突/)
 })
