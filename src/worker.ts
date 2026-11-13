@@ -19,6 +19,14 @@ function send(reply: WorkerReply): void {
 process.on('disconnect', () => controller.abort())
 process.on('message', async (packet: { type: string; request?: WorkerRequest }) => {
   if (packet.type === 'cancel') { controller.abort(); return }
+  // Warm handshake: run the request-independent half of startup (auth, SDK
+  // import, runtime start) so the following request pays only the generation.
+  // The process still serves exactly one request and then exits.
+  if (packet.type === 'warm') {
+    try { await prepared(); send({ type: 'warm-ready' }) }
+    catch (error) { send({ type: 'failure', failure: failureOf(error) }) }
+    return
+  }
   if (packet.type !== 'request' || started) return
   started = true
   try { await execute(packet.request!) }
@@ -31,7 +39,14 @@ process.on('message', async (packet: { type: string; request?: WorkerRequest }) 
   }
 })
 
-async function execute(request: WorkerRequest): Promise<void> {
+/**
+ * Startup shared by the warm handshake and a cold request.
+ *
+ * The tool-result spill threshold stays out of this step: it depends on the
+ * request's input size, and the SDK reads it per tool result, so the request
+ * handler sets it before querying.
+ */
+async function prepare() {
   // 仅通过公开认证接口沿用登录态；凭据不离开 worker，也不写入插件文件。
   const auth = await unstable_v2_authenticate({ executable: process.execPath, timeout: 2000,
     onAuthUrl: () => { throw new Error('请先使用 CodeBuddy 官方 CLI 登录') },
@@ -40,6 +55,23 @@ async function execute(request: WorkerRequest): Promise<void> {
   const sdk = await import('@tencent-ai/codebuddy-code/server')
   const policy = requestPolicy(controller)
   const runtime = await sdk.start({ settingSources: [], sessionStore: new sdk.InMemorySessionStore(), httpProxy: policy })
+  return { auth, sdk, runtime, policy }
+}
+
+type Prepared = Awaited<ReturnType<typeof prepare>>
+let preparedPromise: Promise<Prepared> | undefined
+/** Memoized so the warm handshake and the request that follows share one startup. */
+function prepared(): Promise<Prepared> {
+  preparedPromise ??= prepare()
+  return preparedPromise
+}
+
+async function execute(request: WorkerRequest): Promise<void> {
+  if (request.toolResultThresholdKb !== undefined) {
+    process.env.CODEBUDDY_TOOL_RESULT_THRESHOLD_KB = String(request.toolResultThresholdKb)
+  }
+  const { auth, sdk, runtime, policy } = await prepared()
+  controller.signal.throwIfAborted()
   const id = randomUUID()
   let completed = false, generations = 0
   let subscriptionError: unknown

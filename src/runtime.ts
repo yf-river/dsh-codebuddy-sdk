@@ -6,8 +6,8 @@ import { llmError, type Failure } from './errors.js'
 import type { ModelEvent } from './stream.js'
 import type { ToolSchema } from '@deepseek-ai/dsh-llm'
 
-export interface WorkerRequest { model: string; cwd: string; system: string; input: unknown[]; tools: readonly ToolSchema[]; maxTokens?: number; effort?: string; search?: { query: string } }
-export type WorkerReply = { type: 'message'; message: ModelEvent } | { type: 'complete' } | { type: 'failure'; failure: Failure }
+export interface WorkerRequest { model: string; cwd: string; system: string; input: unknown[]; tools: readonly ToolSchema[]; maxTokens?: number; effort?: string; search?: { query: string }; /** Per-request spill threshold, applied inside the worker before querying. */ toolResultThresholdKb?: number }
+export type WorkerReply = { type: 'message'; message: ModelEvent } | { type: 'complete' } | { type: 'failure'; failure: Failure } | { type: 'warm-ready' }
 export interface WorkerCleanup { kind: 'normal' | 'forced'; durationMs: number; reason?: string }
 
 const GRACE_MS = 5000
@@ -15,18 +15,118 @@ const REAP_MS = 1000
 // 归属记录保留到实际 close；超时返回不等于宣称无法确认的进程已退出。
 const owned = new Set<ChildProcess>()
 
+/** How long a warm worker waits for its request before it is reaped. */
+const WARM_TTL_MS = 2 * 60 * 1000
+/** Upper bound on warm workers across every key. */
+const WARM_CAP = 10
+
+interface WarmSlot { worker: ChildProcess; ready: boolean; timer?: ReturnType<typeof setTimeout> }
+
+const warmSlots = new Map<string, WarmSlot[]>()
+const inflight = new Map<string, number>()
+
+const warmKey = (request: WorkerRequest): string => request.model + '\u0000' + request.cwd
+
+function bumpInflight(key: string, delta: number): void {
+  const next = Math.max(0, (inflight.get(key) ?? 0) + delta)
+  if (next === 0) inflight.delete(key)
+  else inflight.set(key, next)
+}
+
+function dropSlot(key: string, slot: WarmSlot, kill: boolean): void {
+  const list = warmSlots.get(key)
+  if (list !== undefined) {
+    const index = list.indexOf(slot)
+    if (index >= 0) list.splice(index, 1)
+    if (list.length === 0) warmSlots.delete(key)
+  }
+  if (slot.timer !== undefined) clearTimeout(slot.timer)
+  slot.worker.removeAllListeners()
+  if (kill) { try { slot.worker.kill('SIGKILL') } catch {} }
+  owned.delete(slot.worker)
+}
+
+/**
+ * Fork a worker in the environment every CodeBuddy request needs.
+ *
+ * A warm spare skips the stderr pipe: nobody reads it before the request
+ * arrives, and an open pipe keeps the host process alive past its work.
+ */
+function forkWorker(request: WorkerRequest, warm = false): ChildProcess {
+  return fork(fileURLToPath(new URL('./worker.js', import.meta.url)), [], {
+    cwd: request.cwd, execPath: process.execPath, execArgv: [], detached: true,
+    stdio: ['ignore', 'ignore', warm ? 'ignore' : 'pipe', 'ipc'],
+    env: { ...process.env, DISABLE_AUTOUPDATER: '1', CODEBUDDY_DISABLE_AUTO_MEMORY: '1', CODEBUDDY_CODE_DISABLE_AUTO_MEMORY: '1',
+      CODEBUDDY_CODE_DISABLE_BACKGROUND_TASKS: '1', CODEBUDDY_DISABLE_SYSTEM_REMINDER_MD: '1', CODEBUDDY_PRE_MESSAGE_COMPACT: '0',
+      CODEBUDDY_MAX_RETRIES: '0', CODEBUDDY_MODEL_401_MAX_RETRIES: '0', CODEBUDDY_RETRY_WATCHDOG: '0' },
+  })
+}
+
+/** Take an already-warm worker for this key, or undefined when none is ready. */
+function takeWarm(request: WorkerRequest): ChildProcess | undefined {
+  const key = warmKey(request)
+  const list = warmSlots.get(key)
+  const index = list?.findIndex(slot => slot.ready) ?? -1
+  if (list === undefined || index < 0) return undefined
+  const [slot] = list.splice(index, 1)
+  if (list.length === 0) warmSlots.delete(key)
+  if (slot.timer !== undefined) clearTimeout(slot.timer)
+  // The request owns these handlers now; the slot's own listeners must not see it.
+  slot.worker.removeAllListeners()
+  slot.worker.stderr?.removeAllListeners()
+  // A spare is unref'd while idle; once it carries a request it must hold the
+  // host open exactly like a cold fork does.
+  slot.worker.ref()
+  ;(slot.worker as unknown as { channel?: { ref?: () => void } }).channel?.ref?.()
+  return slot.worker
+}
+
+/**
+ * Keep one warm worker per in-flight request of this key, capped globally.
+ *
+ * A warm worker is still single-use — it serves exactly one request and exits —
+ * so state isolation is unchanged from the cold path; the only difference is
+ * that authentication and runtime startup happened while the previous request
+ * was still streaming.
+ */
+function ensureWarm(request: WorkerRequest): void {
+  const key = warmKey(request)
+  const list = warmSlots.get(key) ?? []
+  const target = Math.min(WARM_CAP, inflight.get(key) ?? 0)
+  if (list.length >= target) return
+  const worker = forkWorker(request, true)
+  // A spare must never hold the host process open; the IPC channel is a handle
+  // of its own, so unref it alongside the child.
+  worker.unref()
+  ;(worker as unknown as { channel?: { unref?: () => void } }).channel?.unref?.()
+  owned.add(worker)
+  const slot: WarmSlot = { worker, ready: false }
+  list.push(slot)
+  warmSlots.set(key, list)
+  worker.on('message', (reply: WorkerReply) => {
+    if (reply.type === 'warm-ready') { slot.ready = true; return }
+    if (reply.type === 'failure') dropSlot(key, slot, true)
+  })
+  worker.on('error', () => { dropSlot(key, slot, true) })
+  worker.on('exit', () => { dropSlot(key, slot, false) })
+  slot.timer = setTimeout(() => { dropSlot(key, slot, true) }, WARM_TTL_MS)
+  slot.timer.unref()
+  worker.send({ type: 'warm' }, () => {})
+}
+
+process.once('exit', () => {
+  for (const list of warmSlots.values()) {
+    for (const slot of list) { try { slot.worker.kill('SIGKILL') } catch {} }
+  }
+})
+
 export function runWorker(request: WorkerRequest, signal?: AbortSignal) {
   // DSH 管理历史工具结果；SDK 的落盘预览包含临时会话路径，会改写重放前缀。
   // 整份输入的 JSON 字节数覆盖任一结果的 UTF-8 字节数，阈值随本次输入计算。
   const toolResultThresholdKb = Math.max(1, Math.ceil(Buffer.byteLength(JSON.stringify(request.input), 'utf8') / 1024))
-  const worker = fork(fileURLToPath(new URL('./worker.js', import.meta.url)), [], {
-    cwd: request.cwd, execPath: process.execPath, execArgv: [], detached: true,
-    stdio: ['ignore', 'ignore', 'pipe', 'ipc'],
-    env: { ...process.env, DISABLE_AUTOUPDATER: '1', CODEBUDDY_DISABLE_AUTO_MEMORY: '1', CODEBUDDY_CODE_DISABLE_AUTO_MEMORY: '1',
-      CODEBUDDY_CODE_DISABLE_BACKGROUND_TASKS: '1', CODEBUDDY_DISABLE_SYSTEM_REMINDER_MD: '1', CODEBUDDY_PRE_MESSAGE_COMPACT: '0',
-      ...(!request.search ? { CODEBUDDY_TOOL_RESULT_THRESHOLD_KB: String(toolResultThresholdKb) } : {}),
-      CODEBUDDY_MAX_RETRIES: '0', CODEBUDDY_MODEL_401_MAX_RETRIES: '0', CODEBUDDY_RETRY_WATCHDOG: '0' },
-  })
+  const key = warmKey(request)
+  bumpInflight(key, 1)
+  const worker = takeWarm(request) ?? forkWorker(request)
   owned.add(worker)
   const queue: ModelEvent[] = []
   let wake: (() => void) | undefined, failure: Error | undefined
@@ -62,6 +162,7 @@ export function runWorker(request: WorkerRequest, signal?: AbortSignal) {
   const settle = () => {
     if (settled) return
     settled = true
+    bumpInflight(key, -1)
     if (deadline) clearTimeout(deadline)
     if (reapTimer) clearTimeout(reapTimer)
     signal?.removeEventListener('abort', stop)
@@ -98,7 +199,7 @@ export function runWorker(request: WorkerRequest, signal?: AbortSignal) {
     if (worker.connected) worker.send({ type: 'cancel' }, () => {})
     arm()
   }
-  worker.stderr!.on('data', () => {}) // SDK 日志可能含账户信息，不转发或保存。
+  worker.stderr?.on('data', () => {}) // SDK 日志可能含账户信息，不转发或保存；预热进程不接 stderr 管道。
   worker.on('message', (reply: WorkerReply) => {
     if (settled) return
     if (reply.type === 'message') {
@@ -109,7 +210,7 @@ export function runWorker(request: WorkerRequest, signal?: AbortSignal) {
     } else if (complete) {
       cleanupReason ??= 'cleanup-error'
       stop()
-    } else { failure ??= llmError(reply.failure); stop() }
+    } else if (reply.type === 'failure') { failure ??= llmError(reply.failure); stop() }
     notify()
   })
   worker.on('error', error => { failure ??= error; stop(); notify() })
@@ -126,7 +227,14 @@ export function runWorker(request: WorkerRequest, signal?: AbortSignal) {
     else { owned.delete(worker); settle() }
   })
   signal?.addEventListener('abort', stop, { once: true })
-  worker.send({ type: 'request', request }, error => { if (error && !settled) { failure ??= error; stop(); notify() } })
+  worker.send({
+    type: 'request',
+    request: request.search ? request : { ...request, toolResultThresholdKb },
+  }, error => { if (error && !settled) { failure ??= error; stop(); notify() } })
+  // This request consumed a spare (or went cold); warm the next one behind it.
+  // Web search is an occasional one-shot path with its own tool whitelist, so it
+  // keeps the cold start instead of holding a spare.
+  if (!request.search) ensureWarm(request)
   if (signal?.aborted) stop()
   return {
     done, stop,
