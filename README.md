@@ -41,9 +41,11 @@ For Hy4, select the catalog entry `codebuddy/hy4std` with `high` reasoning. The 
 
 `toolPolicy` filters model-visible tools: omitted `allow` means every tool, `deny` wins after `allow`, and `*` is the only wildcard. The example keeps core tools and OpenViking while excluding TAPD/Gongfeng; use `deny: ['mcp__*']` for a core-only coding surface. It changes only what the model sees, not DSH execution permissions; filtered tools never reach the model-visible list.
 
+`retryPolicy` is executed by DSH's `llm-retry` on the agent's failed-step extension point, with the same form official providers use: `mode: normal` (default) retries only `EMPTY_RESPONSE`, `RATE_LIMIT`, `SERVER`, `TIMEOUT`, `TRANSPORT` with `maxRetries` 5; `mode: always` retries every failed model request. Model-output faults such as a degraded response or corrupt tool arguments are outside the default set; opt in per route with explicit `retryableCodes` or `always`.
+
 ## Behavior
 
-Each generation receives DSH's complete current native role history. Compaction, pruning, edits and process restart do not require importing a persistent SDK session. Stable bidirectional names distinguish hyphenated tools from underscored tools, with original DSH names included in aliased tool descriptions. Tool calls and results retain their IDs, including parallel identical calls. Invalid or incomplete tool relationships fail before provider I/O.
+Each generation receives DSH's complete current native role history. Compaction, pruning, edits and process restart do not require importing a persistent SDK session. Stable bidirectional names distinguish hyphenated tools from underscored tools, with original DSH names included in aliased tool descriptions. Tool calls and results retain their IDs, including parallel identical calls. Invalid or incomplete tool relationships fail before provider I/O. A call truncated by the output limit is not delivered; a call whose arguments are corrupt is delivered verbatim so DSH's own argument validation reports the error for that call alone and the rest of the batch still runs.
 
 DSH executes every tool declared for the conversation. Ordinary model workers receive declarations through public MCP APIs, deny SDK tool execution, and allow one outbound model request through the official HTTP host policy. Native web search runs in its own worker with only WebSearch enabled. Each request runs in a separate child process. Official SDK authentication supplies the current login directly in worker memory; the plugin does not decode or persist credentials.
 

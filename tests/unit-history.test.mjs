@@ -17,6 +17,14 @@ test('同名同参数并行调用以各自 ID 关联乱序结果',()=>{
  const {input}=requestHistory({messages:[text('user','u'),{role:'assistant',content:[call('a'),call('b')]},result('b','two'),result('a','one')]})
  assert.deepEqual(input.filter(x=>x.type==='function_call_result').map(x=>[x.callId,x.output]),[['b','two'],['a','one']])
 })
+test('损坏的历史参数按空对象回放，不阻断会话续接',()=>{
+ for(const arguments_ of ['{"todos": []}}','{','null','[]']){
+  const damaged={type:'tool-call',id:'a',name:'read',arguments:arguments_}
+  const {input}=requestHistory({messages:[text('user','u'),{role:'assistant',content:[damaged]},result('a','Invalid arguments'),text('user','next')]})
+  assert.equal(input.find(x=>x.type==='function_call').arguments,'{}')
+  assert.equal(input.at(-1).content[0].text,'next')
+ }
+})
 test('完整历史不依赖旧 SDK replay 元数据或会话文件',()=>{
  const a=text('assistant','old answer');a.source={replayState:{response:{kind:'codebuddy-sdk',version:1,sdkSessionId:'missing'}}}
  assert.equal(requestHistory({messages:[text('user','edited'),a,text('user','next')]}).input.length,3)

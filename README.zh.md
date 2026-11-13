@@ -41,6 +41,8 @@ Hy4 使用账号目录中的 `codebuddy/hy4std`，推理档位为 `high`。插�
 
 `toolPolicy` 过滤模型可见工具：`allow` 省略即全部，`deny` 在 `allow` 之后生效，`*` 是唯一通配符。上例保留核心工具和 OpenViking，排除 TAPD/工蜂；需要纯编码面时用 `deny: ['mcp__*']`。它只改变模型看到的工具，不改变 DSH 的执行权限；被过滤工具不会进入模型可见列表。
 
+`retryPolicy` 交给 DSH 的 `llm-retry` 执行，与官方 provider 同形：`mode: normal`（默认）只重试 `EMPTY_RESPONSE`、`RATE_LIMIT`、`SERVER`、`TIMEOUT`、`TRANSPORT`，`maxRetries` 默认 5；`mode: always` 对每次模型请求失败都重试。响应过短、工具参数损坏这类模型输出问题不在默认集合里，需要时显式加进 `retryableCodes` 或改用 `always`。
+
 ## 会话和工具
 
 - 每次提交 DSH 当前完整历史，用户、助手和工具结果各自保留角色与调用 ID。
@@ -73,7 +75,7 @@ DeepSeek 的 `deepseek-search-api`、`deepseek-fetch-api` 和 `deepseek-official
 
 ## 错误处理
 
-空回复不会作为成功回答；拒绝信息会显示并标记失败。工具调用只有在整批参数、调用 ID 和完整输出校验通过后才交给 DSH；截断或损坏的调用不会执行。
+空回复不会作为成功回答；拒绝信息会显示并标记失败。工具调用只有调用 ID 和完整输出校验通过后才交给 DSH；截断的调用不会执行，参数损坏的调用按原样交付给 DSH 的参数校验回传可纠正错误，同批其他调用不受影响。
 
 上下文超限、额度不足、认证失效和限流会保留可获得的错误分类与请求标识，让 DSH 按自身规则恢复或提示。插件每次生成只允许一次出站模型请求；SDK 自行恢复会被阻止。部分网络故障在 SDK 内部重试前没有公开原始错误，此时返回 `CODEBUDDY_RETRY_BLOCKED`，可手动重试，不伪装成正常结束。SDK 未公开的等待时间、请求标识及 token 数据仍为未知。
 
