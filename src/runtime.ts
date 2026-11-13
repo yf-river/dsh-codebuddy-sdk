@@ -16,11 +16,15 @@ const REAP_MS = 1000
 const owned = new Set<ChildProcess>()
 
 export function runWorker(request: WorkerRequest, signal?: AbortSignal) {
+  // DSH 管理历史工具结果；SDK 的落盘预览包含临时会话路径，会改写重放前缀。
+  // 整份输入的 JSON 字节数覆盖任一结果的 UTF-8 字节数，阈值随本次输入计算。
+  const toolResultThresholdKb = Math.max(1, Math.ceil(Buffer.byteLength(JSON.stringify(request.input), 'utf8') / 1024))
   const worker = fork(fileURLToPath(new URL('./worker.js', import.meta.url)), [], {
     cwd: request.cwd, execPath: process.execPath, execArgv: [], detached: true,
     stdio: ['ignore', 'ignore', 'pipe', 'ipc'],
     env: { ...process.env, DISABLE_AUTOUPDATER: '1', CODEBUDDY_DISABLE_AUTO_MEMORY: '1', CODEBUDDY_CODE_DISABLE_AUTO_MEMORY: '1',
       CODEBUDDY_CODE_DISABLE_BACKGROUND_TASKS: '1', CODEBUDDY_DISABLE_SYSTEM_REMINDER_MD: '1', CODEBUDDY_PRE_MESSAGE_COMPACT: '0',
+      ...(!request.search ? { CODEBUDDY_TOOL_RESULT_THRESHOLD_KB: String(toolResultThresholdKb) } : {}),
       CODEBUDDY_MAX_RETRIES: '0', CODEBUDDY_MODEL_401_MAX_RETRIES: '0', CODEBUDDY_RETRY_WATCHDOG: '0' },
   })
   owned.add(worker)

@@ -49,6 +49,8 @@ DSH executes every tool declared for the conversation. Ordinary model workers re
 
 DSH system prompts override defaults. Controllable CodeBuddy project rules, memory and background work are disabled. DSH owns compaction; the host policy blocks additional SDK recovery model requests. Summary requests are independent calls using DSH's history and instructions.
 
+Ordinary generations preserve historical tool results in full. The SDK tool-result spill threshold is computed from the current input byte size, so replay does not replace results with a 2KB preview containing a temporary SDK session path. DSH owns history retention.
+
 Token usage separates uncached input, cache reads, cache writes and output. Unknown usage remains unknown. Token counts are not currency charges. The gateway zero-fills Anthropic cache names and reports the real hit under `prompt_tokens_details.cached_tokens` / `prompt_cache_hit_tokens`; the adapter reads the first positive value across the supported names. `prompt_cache_miss_tokens` is uncached input, not an extra cache-write bucket.
 
 ## Web search and fetch

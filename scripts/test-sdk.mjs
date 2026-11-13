@@ -170,6 +170,34 @@ try {
       .map(message => message.event.content_block.type), ['thinking', 'text'])
     assert.ok(raw.some(message => message.type === 'stream_event' && message.event.type === 'message_stop'))
   })
+  await check('large historical tool results retain full content and a stable replay prefix', async () => {
+    const resultText = '历史工具结果：保留完整内容，不使用临时文件预览。\n'.repeat(1800) + 'END_OF_TOOL_RESULT'
+    assert.ok(Buffer.byteLength(resultText) > 50 * 1024)
+    const tool = { name: 'read', description: 'Read a file', parameters: { type: 'object', properties: {} } }
+    const history = [system, text('user', 'Read fixture'), {
+      role: 'assistant', content: [{ type: 'tool-call', id: 'stable-large-result', name: 'read', arguments: '{}' }],
+    }, { role: 'tool', source: { callId: 'stable-large-result' }, content: [{ type: 'text', text: resultText }] }]
+    await stream('large-history-a', history, { tools: [tool] })
+    const before = wire()
+    assert.equal(before.messages.find(message => message.role === 'tool').content, resultText)
+    await stream('large-history-b', [...history, text('assistant', 'Read'), text('user', 'Continue')], { tools: [tool] })
+    const after = wire()
+    // conversationRequestId 是 SDK 的请求追踪字段，模型消息正文逐字段比较。
+    const modelMessages = messages => messages.map(({ conversationRequestId: _trace, ...message }) => message)
+    assert.deepEqual(modelMessages(after.messages.slice(0, before.messages.length)), modelMessages(before.messages))
+    assert.deepEqual(after.tools, before.tools)
+  })
+  await check('later system messages retain their role and earlier model prefix', async () => {
+    const tool = { name: 'read', description: 'Read a file', parameters: { type: 'object', properties: {} } }
+    const history = [system, text('user', 'Before policy update')]
+    await stream('policy-before', history, { tools: [tool] })
+    const before = wire()
+    await stream('policy-after', [...history, text('system', 'POLICY_UPDATE_SENTINEL'), text('user', 'After policy update')], { tools: [tool] })
+    const after = wire()
+    const modelMessages = messages => messages.map(({ conversationRequestId: _trace, ...message }) => message)
+    assert.deepEqual(modelMessages(after.messages.slice(0, before.messages.length)), modelMessages(before.messages))
+    assert.ok(after.messages.some(message => message.role === 'system' && JSON.stringify(message.content).includes('POLICY_UPDATE_SENTINEL')))
+  })
   let first, firstMessages
   await check('system override, exact model, output cap, clean project config', async () => {
     firstMessages = [system, text('user', 'Remember FIRST_TURN_SENTINEL value=42')]
