@@ -187,7 +187,7 @@ try {
     assert.deepEqual(modelMessages(after.messages.slice(0, before.messages.length)), modelMessages(before.messages))
     assert.deepEqual(after.tools, before.tools)
   })
-  await check('later system messages retain their role and earlier model prefix', async () => {
+  await check('serialization only: later system messages retain their role and earlier model prefix', async () => {
     const tool = { name: 'read', description: 'Read a file', parameters: { type: 'object', properties: {} } }
     const history = [system, text('user', 'Before policy update')]
     await stream('policy-before', history, { tools: [tool] })

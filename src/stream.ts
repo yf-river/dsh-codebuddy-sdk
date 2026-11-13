@@ -151,16 +151,14 @@ export async function* translateStep(source: AsyncIterator<ModelEvent>, bridge: 
       const calls = [...blocks.values()].filter(block => block.type === 'tool-call')
       if (calls.length && (truncated || refusal || stop === 'content_filter')) throw new LlmError('模型未完整完成工具调用，未交给 DSH 执行', 'INCOMPLETE_TOOL_CALL')
       if (calls.length !== toolIndex) throw new Error('流式工具数量与完整输出不一致')
-      // 在交付任何可执行工具前完成整批校验，避免同一响应的后半部分失败。
+      // 参数损坏只废这一个调用：原始文本原样交给 DSH，由其工具参数校验回传可纠正的错误。
+      // 整批丢弃会让同批合法调用一起失效，模型也拿不到出错的具体调用。
       const completed: { index: number; block: ContentBlock }[] = []
       for (const block of blocks.values()) {
         let content: ContentBlock
         if (block.type === 'tool-call') {
           if (!block.id || !block.name) throw new Error('工具调用缺少 ID 或名称')
-          let args: unknown
-          try { args = JSON.parse(block.text) } catch { throw new LlmError('工具参数不是完整 JSON，未交给 DSH 执行', 'INVALID_TOOL_CALL') }
-          if (!args || typeof args !== 'object' || Array.isArray(args)) throw new LlmError('工具参数必须是 JSON 对象', 'INVALID_TOOL_CALL')
-          bridge.noteToolCall(block.id, block.name, args)
+          bridge.noteToolCall(block.id, block.name, block.text)
           content = { type: 'tool-call', id: ToolCallId(block.id), name: bridge.harnessName(block.name), arguments: block.text }
         } else content = { type: block.type, text: block.text }
         completed.push({ index: block.index, block: content })

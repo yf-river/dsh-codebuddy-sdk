@@ -2,7 +2,7 @@
 
 结论：已复现并修复一个会破坏历史前缀、同时丢失工具结果正文的插件兼容问题。CodeBuddy SDK 默认将超过 50KB 的工具结果写入 SDK 会话目录，只向模型发送前 2048 字节预览；插件每次生成创建新的 SDK 会话，重放同一工具结果会产生不同文件路径。不能把这类缓存停滞归因为服务端 190K 上限。
 
-本文区分已验证修复、历史收益上界和未完成事项。源码与构建产物已修改，运行中的 web profile 尚未安装本次候选包；没有 commit、push 或重启生产服务。
+本文区分已验证修复、历史收益上界和未完成事项。本轮只执行本地分析、测试和文档更新，未执行 commit、push、安装或服务重启。11:14 的只读复核发现，工作区 HEAD 已包含修复提交 `ca1d60f`，web profile 已指向修复包，安装的 runtime 文件包含该修复；这些现场变化不是本轮执行的动作。仍需用安装后的真实业务请求验收。
 
 ## 可复现的证据
 
@@ -80,16 +80,46 @@ SDK 2.172.1 的 `ToolResultBlobService.shouldExternalize()` 默认阈值为 50KB
 
 plan 策略由 `packages/plan/plan-mode/src/index.ts` 注册的 `plan:policy` section 根据状态返回整段文字或空串；当前路由未声明 `systemPromptUpdate`，`SystemPromptProjection.project()` 会替换前部 system 节点，破坏历史前缀。移除工具本身不必重写 system，但同时卸载插件会移除其 section。
 
-已用官方 SDK 出站 fixture 验证：后续 system 消息可以保留原有消息前缀及其 system 角色。因此，兼容后续 system 更新有实现基础；不过这不是 plan 安全行为的真实模型验收，也不等于动态工具声明协议已打通。仅开启 `systemPromptUpdate` 不能解决 plan 开关时同时发生的工具变化。
+官方 SDK 出站 fixture 能保留后续 system 消息的原有前缀及其 role，但后续真实网关和模型测试未通过完整语义验收。不能据此声明 `systemPromptUpdate`；仅开启该标志也不能解决 plan 首次启用时同时发生的工具变化。
 
 完整修复的验收应为：首次 system 节点及已有请求前缀不改写；plan 策略更新以保留优先级的后续消息传递；工具增删由 SDK/网关实际支持的动态声明协议传递；移除工具仍由 DSH 执行层拒绝；初始 plan 模式、开/关、恢复、压缩后的状态均正确；真实模型和缓存计量通过。当前尚未实现这些变更，不能声称机制 A 已通过验收。
 
 如果严格要求所有 `system/message` 文本都永远相同，就必须重新设计 plan 策略的固定规则与动态状态表达，并验证指令优先级；不能把高优先级限制简单改成普通 user 文本。也不能伪报 `toolUpdate` 能力、保留已经卸载的可执行工具，或重装出过故障的 tool-index 插件。
 
+### 真实协议验证补充（2026-11-13 11:07–11:11）
+
+执行了 10 次有上限的 CodeBuddy 请求，每次输出上限 1024、effort 为 high，不执行工具、不修改已有会话。原始记录在 `artifacts/conversation-updates-probe{,-2,-3}/report.json`；可使用 `scripts/probe-conversation-updates.mjs --run --case <name> --out <新目录>` 单独复现。
+
+| 测试 | 真实结果 | 能证明什么 |
+| --- | --- | --- |
+| 后续 system 使用现有 `input_text` 格式，进入／退出 plan，共 2 次 | 均为 HTTP 400，拒绝 `input_text` 内容类型 | 出站 role 保留不足以证明真实请求可用 |
+| 后续 system 使用标准 `text`，进入 plan | 返回 `PLAN_ONLY` | 此次请求遵守了新增限制 |
+| 后续 system 使用标准 `text`，退出 plan | 仍返回 `PLAN_ONLY`，预期为 `IMPLEMENT_ALLOWED` | 不满足“最新 system 完整替换旧 system”的能力声明 |
+| 后续 system 使用字符串，退出 plan | 仍返回 `PLAN_ONLY` | 此格式也没有解决本次反例 |
+| 后续 developer 使用标准 `text`，退出 plan | 仍返回 `PLAN_ONLY` | 不能用改 role 绕过问题 |
+| 修改前部 system 的退出对照 | 返回 `IMPLEMENT_ALLOWED` | 当前前部 system 替换路径能正确传达本次模式状态 |
+| 前部 system 预先约定“最新 system 生效” | 返回 `IMPLEMENT_ALLOWED` | 可作为独立设计的候选，但不是原有任意 system 更新语义的通过证据；尚未验证注入区分、其他策略及真实 DSH 状态链 |
+| 在后续 system 中发送原生 `tool_addition` 内容 | HTTP 400，拒绝 `tool_addition` | 当前这条 SDK／网关路径不接受此格式 |
+| 在后续消息 `providerData.toolsAdded` 中提供新增工具 | 请求完成，但模型返回 `UNAVAILABLE` | 本次工具没有通过该表示方式被模型识别 |
+
+没有根据模型的 reasoning 自述断言网关内部如何转换 role，也没有将两个失败的工具表示方式扩大成“所有可能协议均不支持”的结论。本轮结果已足以否决直接开启两个能力标志的方案。保留原来的完整前部 system 与完整当前工具声明，可以避免为缓存牺牲行为一致性。
+
+另在隔离网络的官方 SDK 探测中，MCP server 设置 `alwaysLoad: false / defer_loading: true` 后，Flash 的真实出站 `tools` 仍为普通完整 function 声明，没有延迟声明标记。不能把这个 SDK 工具发现开关直接当作 DSH 的动态工具协议。
+
+### 不使用 plan 时的剩余影响
+
+不进入 plan 模式可以避开 plan section 的开关及首次引入 `exit_plan_mode` 的工具声明变化。已经处于 plan 的会话需先退出；仅仅不再输入 `/plan` 不会清除已持久化状态，GUI 模式开关也属于同一功能。本轮没有关闭、卸载或修改用户的 plan 配置。
+
+对现有导出逐个比较完整工具 schema，在 54 个包含 CodeBuddy Flash 请求的会话中，43 个没有工具 schema 变化；另外 11 个共有 17 次变化：10 次移除 `render_ui` / `validate_dsh_ui`，6 次涉及 `exit_plan_mode`，1 次涉及其他工具集合更新。UI 工具移除均出现在 2026-11-13 北京时间 00:25–00:43 的同一时间段；这只证明这些会话观察到了相近时间的工具变化，不据此断言卸载根因。逐项记录在 `artifacts/cache-prefix-fix/tool-changes.json`。
+
+不使用 plan 后，仍需区分：SDK 大工具结果随机路径缺陷（已有修复，当前安装文件已包含该修复，业务验收待补）、插件或 MCP 工具清单变化、修改系统指令，以及实际改变旧历史的编辑／压缩／裁剪。后几类操作确实改变了请求，可能产生一次或若干次冷输入；不能把它们与 SDK 缺陷引起的持续停滞混为一谈。`request/header` 的 resume 事件本身也不等于前缀变化，本次轨迹样本的多次 resume 工具清单相同。
+
+在用户接受不使用 plan 的前提下，当前更直接的方案是应用已验证的大工具结果修复，在连续任务中稳定工具与系统配置，并观察真实工作负载；没有证据要求通过重新设计 plan 来处理其余缓存问题。该方案不能保证永远没有缓存 miss，也不承诺复杂任务的回答质量已被本次验证码测试全面覆盖。
+
 ## 交付与后续验证
 
-本地改动在 `src/runtime.ts`；测试在 `scripts/test-sdk.mjs`、`scripts/test-cache-live.mjs`；复查脚本为 `scripts/analyze-cache.mjs`。web profile 仍引用原来的 `artifacts/local/dsh-codebuddy-sdk-0.1.14.tgz`。
+修复在 `src/runtime.ts`；测试在 `scripts/test-sdk.mjs`、`scripts/test-cache-live.mjs`；复查脚本为 `scripts/analyze-cache.mjs`。11:14 现场的 web profile 已引用 `artifacts/cache-prefix-fix/dsh-codebuddy-sdk-0.1.14.tgz`，安装文件含修复。DSH web 进程启动时间为 11:08:37，晚于该文件的安装时间 11:07:57；启动时间先后本身不替代模块加载和真实业务验收。
 
 候选包位于 `artifacts/cache-prefix-fix/dsh-codebuddy-sdk-0.1.14.tgz`，是带本地修复的同版本包，与原有包路径不同。安装前按路径和校验值识别，不能只看版本号。
 
-运行环境变更需单独授权。安装后应核对实际加载的 runtime 文件，使用原会话继续少量真实任务，对照完整结果、cacheRead 增长和 cost-meter 估算；保留旧包用于授权回退。机制 A 的动态工具协议及安全行为验收另需完成，不能用本次 B 修复的 PASS 替代。
+运行环境变更需单独授权，本轮未执行此类动作。后续应核对实际加载的 runtime 文件，使用原会话继续少量真实任务，对照完整结果、cacheRead 增长和 cost-meter 估算；保留旧包用于授权回退。机制 A 的动态工具协议和系统指令替换未通过真实语义验收，不能用本次 B 修复的 PASS 替代，也不应开启相应能力标志。

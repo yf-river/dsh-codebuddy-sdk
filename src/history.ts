@@ -9,6 +9,17 @@ export function stableJson(value: unknown): string {
     ? Object.fromEntries(Object.entries(item).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)) : item)
 }
 
+/** 回放历史时需要合法 JSON 对象；非法或非对象的已记录参数按空对象发送。 */
+function toolArguments(raw: string): string {
+  try {
+    const value: unknown = JSON.parse(raw)
+    if (value && typeof value === 'object' && !Array.isArray(value)) return raw
+  } catch (_invalidHistoricalArguments) {
+    // 落到下面的空对象：损坏的调用在历史中保留错误结果，参数本身无可用内容。
+  }
+  return '{}'
+}
+
 // 每次按 DSH 当前投影重新构造原生消息，旧 SDK 会话元数据不参与恢复。
 export function requestHistory(options: GenerateOptions, images: ReadonlyMap<string, string> = new Map()): { system: string; input: unknown[] } {
   const imageContent = (block: Extract<GenerateOptions['messages'][number]['content'][number], { type: 'image' }>) => {
@@ -68,9 +79,10 @@ export function requestHistory(options: GenerateOptions, images: ReadonlyMap<str
       } else if (block.type === 'tool-call' && message.role === 'assistant') {
         flush()
         if (!block.id || seen.has(block.id)) unsupported('工具调用 ID 缺失或重复')
-        try { JSON.parse(block.arguments) } catch { unsupported('工具参数不是有效 JSON') }
         seen.add(block.id); pending.set(block.id, block.name)
-        input.push({ type: 'function_call', callId: block.id, name: `mcp__custom_tools__${codeBuddyToolName(block.name)}`, arguments: block.arguments, status: 'completed', ...(providerData ? { providerData } : {}) })
+        // 损坏的历史参数按空对象回放：原生 function_call 不能承载非法 JSON，
+        // 而这条调用自己的错误结果已作为工具结果留在历史里。
+        input.push({ type: 'function_call', callId: block.id, name: `mcp__custom_tools__${codeBuddyToolName(block.name)}`, arguments: toolArguments(block.arguments), status: 'completed', ...(providerData ? { providerData } : {}) })
         emitted = true
       } else unsupported(`暂不支持 ${message.role} 中的 ${block.type} 内容`)
     }

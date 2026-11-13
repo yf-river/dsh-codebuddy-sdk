@@ -89,13 +89,17 @@ test('拒绝正文可见并保留失败原因，content_filter 不标为成功',
  const filtered=await collect([raw({},'content_filter'),done([])])
  assert.equal(filtered.chunks.at(-1).reason.failure.code,'REFUSAL')
 })
-test('截断及损坏工具调用不会发出可执行 block-end',async()=>{
- for(const [args,finish] of [['{}','length'],['{','tool_calls'],['null','tool_calls']]){
-  const chunks=[]
-  const events=[raw({tool_calls:[{index:0,id:'a',function:{name:'read',arguments:args}}]},finish),done([{...tool(),arguments:args}])]
-  await assert.rejects(async()=>{for await(const x of translateStep((async function*(){yield*events})(),new CodeBuddyToolBridge([{name:'read',description:'',parameters:{type:'object'}}]),model))chunks.push(x)})
-  assert.ok(!chunks.some(x=>x.type==='block-end'&&x.block.type==='tool-call'))
- }
+test('截断的工具调用不会发出可执行 block-end',async()=>{
+ const chunks=[]
+ const events=[raw({tool_calls:[{index:0,id:'a',function:{name:'read',arguments:'{}'}}]},'length'),done([{...tool(),arguments:'{}'}])]
+ await assert.rejects(async()=>{for await(const x of translateStep((async function*(){yield*events})(),new CodeBuddyToolBridge([{name:'read',description:'',parameters:{type:'object'}}]),model))chunks.push(x)},e=>e.code==='INCOMPLETE_TOOL_CALL')
+ assert.ok(!chunks.some(x=>x.type==='block-end'&&x.block.type==='tool-call'))
+})
+test('损坏的参数原样交付，由 DSH 对单个调用报参数错误',async()=>{
+ const chunks=[];const events=[raw({tool_calls:[{index:0,id:'a',function:{name:'read',arguments:'{'}},{index:1,id:'b',function:{name:'read',arguments:'{}'}}]},'tool_calls'),done([{...tool(),callId:'a',arguments:'{'},{...tool(),callId:'b',arguments:'{}'}])]
+ for await(const x of translateStep((async function*(){yield*events})(),new CodeBuddyToolBridge([{name:'read',description:'',parameters:{type:'object'}}]),model))chunks.push(x)
+ assert.deepEqual(chunks.filter(x=>x.type==='block-end'&&x.block.type==='tool-call').map(x=>[x.block.id,x.block.arguments]),[['a','{'],['b','{}']])
+ assert.equal(chunks.at(-1).reason.kind,'tool-calls')
 })
 test('整批工具全部校验后才交付，后一个重复 ID 不会提前执行第一个',async()=>{
  const chunks=[]

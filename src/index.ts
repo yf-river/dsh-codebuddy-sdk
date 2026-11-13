@@ -1,5 +1,6 @@
 import type { Context } from '@deepseek-ai/cordis'
-import { LlmAdapter, LlmError, ReasoningEffortId } from '@deepseek-ai/dsh-llm'
+import { LlmAdapter, LlmError, ReasoningEffortId, RetryPolicySchema, resolveRetryPolicy } from '@deepseek-ai/dsh-llm'
+import type { RetryPolicyConfig, ResolvedRetryPolicy } from '@deepseek-ai/dsh-llm'
 import type { GenerateOptions, LlmModelInfo, LlmResolvedModelInfo, StreamChunk } from '@deepseek-ai/dsh-llm'
 import { unstable_v2_createSession, type Session, type SessionOptions } from '@tencent-ai/agent-sdk'
 import z from '@deepseek-ai/schemastery'
@@ -23,6 +24,7 @@ export interface Config {
   maxTokens?: number
   searchModel?: string
   toolPolicy?: ToolPolicy
+  retryPolicy?: RetryPolicyConfig
 }
 export const Config: z<Config> = z.object({
   provider: z.string().description('Provider route (default codebuddy)'),
@@ -36,6 +38,7 @@ export const Config: z<Config> = z.object({
     allow: z.array(z.string()).description('Tool name patterns allowed to reach the model; omitted means all'),
     deny: z.array(z.string()).description('Tool name patterns removed after allow; deny wins'),
   }).description('Optional model-visible tool filter; `*` is the only wildcard'),
+  retryPolicy: RetryPolicySchema.description('Model-request retry policy for this route; omitted uses transient defaults'),
 })
 export const name = 'codebuddy'
 export const inject = ['llm']
@@ -50,13 +53,16 @@ class CodeBuddyAdapter extends LlmAdapter {
   private discovery?: Promise<void>
   private discoverySession?: Session
   private readonly active = new Set<ReturnType<typeof runWorker>>()
+  private readonly retryPolicy: ResolvedRetryPolicy
   private disposed = false
 
   constructor(private readonly config: Config, private readonly attachments: () => AttachmentStore | undefined) {
     super()
     if (config.pathToCodebuddyCode) unsupported('pathToCodebuddyCode 不适用于 Server 接口；请移除此配置，使用锁定的官方运行时')
+    this.retryPolicy = resolveRetryPolicy(config.retryPolicy, 'codebuddy: retryPolicy')
   }
   override providerInfo(provider: string) { return { id: provider, name: 'CodeBuddy' } }
+  override providerRetryPolicy(_provider: string): ResolvedRetryPolicy { return this.retryPolicy }
 
   private sdkOptions(): SessionOptions {
     return {
