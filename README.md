@@ -41,7 +41,7 @@ For Hy4, select the catalog entry `codebuddy/hy4std` with `high` reasoning. The 
 
 `toolPolicy` filters model-visible tools: omitted `allow` means every tool, `deny` wins after `allow`, and `*` is the only wildcard. The example keeps core tools and OpenViking while excluding TAPD/Gongfeng; use `deny: ['mcp__*']` for a core-only coding surface. It changes only what the model sees, not DSH execution permissions; filtered tools never reach the model-visible list.
 
-`retryPolicy` is executed by DSH's `llm-retry` on the agent's failed-step extension point, with the same form official providers use: `mode: normal` (default) retries only `EMPTY_RESPONSE`, `RATE_LIMIT`, `SERVER`, `TIMEOUT`, `TRANSPORT` with `maxRetries` 5; `mode: always` retries every failed model request. Model-output faults such as a degraded response or corrupt tool arguments are outside the default set; opt in per route with explicit `retryableCodes` or `always`.
+`retryPolicy` is executed by DSH's `llm-retry` on the agent's failed-step extension point, with the same form official providers use: `mode: normal` (default) retries `EMPTY_RESPONSE`, `RATE_LIMIT`, `SERVER`, `TIMEOUT`, `TRANSPORT` and `NETWORK` with `maxRetries` 5; `mode: always` retries every failed model request. A model stream silent for 3 minutes now fails as a timeout/network error and is retried automatically instead of waiting for the upstream 10-minute idle cut. Model-output faults such as a degraded response or corrupt tool arguments are outside the default set; opt in per route with explicit `retryableCodes` or `always`.
 
 ## Behavior
 

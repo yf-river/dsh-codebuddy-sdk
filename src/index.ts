@@ -1,5 +1,5 @@
 import type { Context } from '@deepseek-ai/cordis'
-import { LlmAdapter, LlmError, ReasoningEffortId, RetryPolicySchema, resolveRetryPolicy } from '@deepseek-ai/dsh-llm'
+import { LlmAdapter, LlmError, ReasoningEffortId, RetryPolicySchema } from '@deepseek-ai/dsh-llm'
 import type { RetryPolicyConfig, ResolvedRetryPolicy } from '@deepseek-ai/dsh-llm'
 import type { GenerateOptions, LlmModelInfo, LlmResolvedModelInfo, StreamChunk } from '@deepseek-ai/dsh-llm'
 import { unstable_v2_createSession, type Session, type SessionOptions } from '@tencent-ai/agent-sdk'
@@ -7,6 +7,7 @@ import z from '@deepseek-ai/schemastery'
 import { modelsFromRaw, type CodeBuddyModel } from './models.js'
 import { translateStep } from './stream.js'
 import { CodeBuddyToolBridge } from './tool-bridge.js'
+import { resolveCodeBuddyRetryPolicy } from './retry-policy.js'
 import { selectTools, type ToolPolicy } from './tool-policy.js'
 import { requestHistory, unsupported } from './history.js'
 import { llmError } from './errors.js'
@@ -59,7 +60,7 @@ class CodeBuddyAdapter extends LlmAdapter {
   constructor(private readonly config: Config, private readonly attachments: () => AttachmentStore | undefined) {
     super()
     if (config.pathToCodebuddyCode) unsupported('pathToCodebuddyCode 不适用于 Server 接口；请移除此配置，使用锁定的官方运行时')
-    this.retryPolicy = resolveRetryPolicy(config.retryPolicy, 'codebuddy: retryPolicy')
+    this.retryPolicy = resolveCodeBuddyRetryPolicy(config.retryPolicy)
   }
   override providerInfo(provider: string) { return { id: provider, name: 'CodeBuddy' } }
   override providerRetryPolicy(_provider: string): ResolvedRetryPolicy { return this.retryPolicy }

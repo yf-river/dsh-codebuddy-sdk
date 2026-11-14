@@ -58,6 +58,9 @@ function forkWorker(request: WorkerRequest, warm = false): ChildProcess {
     stdio: ['ignore', 'ignore', warm ? 'ignore' : 'pipe', 'ipc'],
     env: { ...process.env, DISABLE_AUTOUPDATER: '1', CODEBUDDY_DISABLE_AUTO_MEMORY: '1', CODEBUDDY_CODE_DISABLE_AUTO_MEMORY: '1',
       CODEBUDDY_CODE_DISABLE_BACKGROUND_TASKS: '1', CODEBUDDY_DISABLE_SYSTEM_REMINDER_MD: '1', CODEBUDDY_PRE_MESSAGE_COMPACT: '0',
+      // A silent model stream should fail fast (3 minutes) instead of waiting for the 10-minute upstream idle cut.
+      CODEBUDDY_STREAM_TIMEOUT_MS: '180000', CODEBUDDY_FIRST_TOKEN_TIMEOUT_MS: '180000',
+      CODEBUDDY_RECOVERY_FIRST_TOKEN_TIMEOUT_MS: '180000',
       CODEBUDDY_MAX_RETRIES: '0', CODEBUDDY_MODEL_401_MAX_RETRIES: '0', CODEBUDDY_RETRY_WATCHDOG: '0' },
   })
 }

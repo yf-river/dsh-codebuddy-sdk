@@ -75,6 +75,8 @@ npm run test:integration
 3. 在界面选择 CodeBuddy 的精确 DeepSeek 模型。关闭插件不会自动切换到官方 DeepSeek，需手动选择已配置的官方路由。
 4. 如需回退，在目标 profile 的 CodeBuddy 插件行设置 `disabled: true`，重启该 profile 并选择官方路由；已有 DSH 会话保留。需要恢复依赖版本时使用安装前的备份。
 
+2026-11-14 处理一次 10 分钟静默后 `NETWORK/aborted`：会话 `9c2a3680` 的 turn 3 只输出一个 reasoning「确认」，随后 10 分钟无数据，被上游/代理空闲断开；下一轮重试成功。插件现在把 SDK 的流静默/首 token 超时设为 180 秒，并把 `NETWORK` 加入默认可重试集合，由 DSH 的 `llm-retry` 自动重试（默认 5 次）；若已有可见输出，重试仍由 DSH 的恢复策略决定，插件不伪造内容。
+
 ## 能证明与不能证明的内容
 
 通过上述验收可以说明列出的日常流程和异常边界已工作，不能证明所有任务永不出错，也不能证明与官方 DeepSeek 的编程质量一致。CodeBuddy 仍存在消息包装、工具名前缀、Schema 顶层约束和部署默认值等差异。官方公开接口的使用方式已限定，但这不代替 CodeBuddy 对具体账号使用条款的解释。

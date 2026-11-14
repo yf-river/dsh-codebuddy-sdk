@@ -41,7 +41,7 @@ Hy4 使用账号目录中的 `codebuddy/hy4std`，推理档位为 `high`。插�
 
 `toolPolicy` 过滤模型可见工具：`allow` 省略即全部，`deny` 在 `allow` 之后生效，`*` 是唯一通配符。上例保留核心工具和 OpenViking，排除 TAPD/工蜂；需要纯编码面时用 `deny: ['mcp__*']`。它只改变模型看到的工具，不改变 DSH 的执行权限；被过滤工具不会进入模型可见列表。
 
-`retryPolicy` 交给 DSH 的 `llm-retry` 执行，与官方 provider 同形：`mode: normal`（默认）只重试 `EMPTY_RESPONSE`、`RATE_LIMIT`、`SERVER`、`TIMEOUT`、`TRANSPORT`，`maxRetries` 默认 5；`mode: always` 对每次模型请求失败都重试。响应过短、工具参数损坏这类模型输出问题不在默认集合里，需要时显式加进 `retryableCodes` 或改用 `always`。
+`retryPolicy` 交给 DSH 的 `llm-retry` 执行，与官方 provider 同形：`mode: normal`（默认）重试 `EMPTY_RESPONSE`、`RATE_LIMIT`、`SERVER`、`TIMEOUT`、`TRANSPORT` 和 `NETWORK`，`maxRetries` 默认 5；`mode: always` 对每次模型请求失败都重试。模型流静默超过 3 分钟会按超时/网络错误失败并自动重试，不再等上游的 10 分钟空闲断开。响应过短、工具参数损坏这类模型输出问题不在默认集合里，需要时显式加进 `retryableCodes` 或改用 `always`。
 
 ## 会话和工具
 
